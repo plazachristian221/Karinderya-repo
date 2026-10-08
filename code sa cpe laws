@@ -4,8 +4,15 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+
+# =========================================================
+# FLASK CONFIGURATION
+# =========================================================
+
 app.secret_key = "lutong-bahay-secret-key"
+
 DATABASE = "karinderya.db"
+
 
 # =========================================================
 # DATABASE
@@ -16,10 +23,25 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+
 def init_db():
     conn = get_db()
-    
-    # Orders table
+
+    # -----------------------------------------------------
+    # USERS TABLE
+    # -----------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    # -----------------------------------------------------
+    # ORDERS TABLE
+    # -----------------------------------------------------
     conn.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,22 +56,13 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
-    
-    # Users table
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )
-    """)
-    
+
     conn.commit()
     conn.close()
 
+
 # =========================================================
-# KARINDERYAS & MENUS (Hardcoded Data)
+# KARINDERYAS
 # =========================================================
 
 restaurants = {
@@ -59,18 +72,21 @@ restaurants = {
         "lat": 14.6760,
         "lng": 121.0437
     },
+
     2: {
         "name": "Lutong Bahay Express",
         "address": "Quezon City",
         "lat": 14.6800,
         "lng": 121.0500
     },
+
     3: {
         "name": "Nanay's Karinderya",
         "address": "Quezon City",
         "lat": 14.6700,
         "lng": 121.0400
     },
+
     4: {
         "name": "Ate's Carinderia",
         "address": "Quezon City",
@@ -79,120 +95,286 @@ restaurants = {
     }
 }
 
+
+# =========================================================
+# MENUS
+# =========================================================
+
 menus = {
+
     1: [
-        {"name": "Chicken Adobo", "price": 75},
-        {"name": "Pork Sinigang", "price": 85},
-        {"name": "Fried Bangus", "price": 90},
-        {"name": "Pancit Canton", "price": 65}
+        {
+            "name": "Chicken Adobo",
+            "price": 75
+        },
+        {
+            "name": "Pork Sinigang",
+            "price": 85
+        },
+        {
+            "name": "Fried Bangus",
+            "price": 90
+        },
+        {
+            "name": "Pancit Canton",
+            "price": 65
+        }
     ],
+
     2: [
-        {"name": "Beef Tapa", "price": 85},
-        {"name": "Chicken Inasal", "price": 90},
-        {"name": "Pork BBQ", "price": 75},
-        {"name": "Ginisang Gulay", "price": 55}
+        {
+            "name": "Beef Tapa",
+            "price": 85
+        },
+        {
+            "name": "Chicken Inasal",
+            "price": 90
+        },
+        {
+            "name": "Pork BBQ",
+            "price": 75
+        },
+        {
+            "name": "Ginisang Gulay",
+            "price": 55
+        }
     ],
+
     3: [
-        {"name": "Pork Adobo", "price": 75},
-        {"name": "Tinolang Manok", "price": 80},
-        {"name": "Fried Tilapia", "price": 70},
-        {"name": "Lumpiang Shanghai", "price": 60}
+        {
+            "name": "Pork Adobo",
+            "price": 75
+        },
+        {
+            "name": "Tinolang Manok",
+            "price": 80
+        },
+        {
+            "name": "Fried Tilapia",
+            "price": 70
+        },
+        {
+            "name": "Lumpiang Shanghai",
+            "price": 60
+        }
     ],
+
     4: [
-        {"name": "Sisig", "price": 80},
-        {"name": "Chicken Curry", "price": 85},
-        {"name": "Pork Chop", "price": 90},
-        {"name": "Mongo with Chicharon", "price": 65}
+        {
+            "name": "Sisig",
+            "price": 80
+        },
+        {
+            "name": "Chicken Curry",
+            "price": 85
+        },
+        {
+            "name": "Pork Chop",
+            "price": 90
+        },
+        {
+            "name": "Mongo with Chicharon",
+            "price": 65
+        }
     ]
 }
 
+
 # =========================================================
-# ROUTES
+# HOME
 # =========================================================
 
 @app.route("/")
 def home():
+
     return render_template("index.html")
 
 
+# =========================================================
+# REGISTER
+# =========================================================
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
-        confirm_password = request.form.get("confirm_password")
 
-        if not username or not password:
-            return render_template("register.html", error="All fields are required.")
-        
+    if request.method == "POST":
+
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        # Check empty fields
+        if not username or not password or not confirm_password:
+
+            return render_template(
+                "register.html",
+                error="All fields are required."
+            )
+
+        # Check username length
+        if len(username) < 3:
+
+            return render_template(
+                "register.html",
+                error="Username must be at least 3 characters."
+            )
+
+        # Check password length
+        if len(password) < 6:
+
+            return render_template(
+                "register.html",
+                error="Password must be at least 6 characters."
+            )
+
+        # Check password confirmation
         if password != confirm_password:
-            return render_template("register.html", error="Passwords do not match.")
+
+            return render_template(
+                "register.html",
+                error="Passwords do not match."
+            )
 
         conn = get_db()
-        # Check if username already exists
-        existing_user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-        
-        if existing_user:
-            conn.close()
-            return render_template("register.html", error="Username already exists. Please choose another.")
 
-        # Encrypt the password and save the user
+        # Check if username already exists
+        existing_user = conn.execute(
+            "SELECT * FROM users WHERE username = ?",
+            (username,)
+        ).fetchone()
+
+        if existing_user:
+
+            conn.close()
+
+            return render_template(
+                "register.html",
+                error="Username already exists. Please choose another."
+            )
+
+        # Hash password
         hashed_password = generate_password_hash(password)
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        conn.execute(
-            "INSERT INTO users (username, password, created_at) VALUES (?, ?, ?)",
-            (username, hashed_password, created_at)
+
+        # Current date and time
+        created_at = datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
         )
+
+        # Insert user
+        conn.execute(
+            """
+            INSERT INTO users
+            (username, password, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (
+                username,
+                hashed_password,
+                created_at
+            )
+        )
+
         conn.commit()
         conn.close()
 
-        # Automatically log the user in after registering
+        # Automatically login after registration
         session["username"] = username
+
         return redirect(url_for("nearby"))
 
     return render_template("register.html")
 
 
+# =========================================================
+# LOGIN
+# =========================================================
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
+
     if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
+
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        # Check fields
+        if not username or not password:
+
+            return render_template(
+                "login.html",
+                error="Please enter your username and password."
+            )
 
         conn = get_db()
-        # Fetch user from database
-        user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+
+        # Find user
+        user = conn.execute(
+            "SELECT * FROM users WHERE username = ?",
+            (username,)
+        ).fetchone()
+
         conn.close()
 
-        # Check if user exists AND the hashed password matches
-        if user and check_password_hash(user["password"], password):
-            session["username"] = username
+        # Verify password
+        if user and check_password_hash(
+            user["password"],
+            password
+        ):
+
+            session["username"] = user["username"]
+
             return redirect(url_for("nearby"))
 
-        return render_template("login.html", error="Invalid username or password.")
+        return render_template(
+            "login.html",
+            error="Invalid username or password."
+        )
 
     return render_template("login.html")
 
 
+# =========================================================
+# NEARBY KARINDERYAS
+# =========================================================
+
 @app.route("/nearby")
 def nearby():
-    if "username" not in session:
-        return redirect(url_for("login"))
-    
-    return render_template("nearby.html", restaurants=restaurants)
 
+    # User must be logged in
+    if "username" not in session:
+
+        return redirect(url_for("login"))
+
+    return render_template(
+        "nearby.html",
+        restaurants=restaurants
+    )
+
+
+# =========================================================
+# RESTAURANT / KARINDERYA MENU
+# =========================================================
 
 @app.route("/restaurant/<int:restaurant_id>")
 def restaurant(restaurant_id):
+
+    # User must be logged in
     if "username" not in session:
+
         return redirect(url_for("login"))
 
+    # Find restaurant
     restaurant_data = restaurants.get(restaurant_id)
+
     if restaurant_data is None:
+
         return "Karinderya not found.", 404
 
-    restaurant_menu = menus.get(restaurant_id, [])
+    # Get restaurant menu
+    restaurant_menu = menus.get(
+        restaurant_id,
+        []
+    )
 
     return render_template(
         "restaurant.html",
@@ -202,59 +384,176 @@ def restaurant(restaurant_id):
     )
 
 
+# =========================================================
+# ORDER
+# =========================================================
+
 @app.route("/order", methods=["GET", "POST"])
 def order():
+
+    # User must be logged in
     if "username" not in session:
+
         return redirect(url_for("login"))
 
-    if request.method == "POST":
-        restaurant_id = request.form.get("restaurant_id")
-        food = request.form.get("food")
-        price = request.form.get("price")
-        payment_method = request.form.get("payment_method")
+    # -----------------------------------------------------
+    # POST - SAVE ORDER
+    # -----------------------------------------------------
 
-        if not all([restaurant_id, food, price, payment_method]):
+    if request.method == "POST":
+
+        restaurant_id = request.form.get(
+            "restaurant_id"
+        )
+
+        food = request.form.get(
+            "food"
+        )
+
+        price = request.form.get(
+            "price"
+        )
+
+        payment_method = request.form.get(
+            "payment_method"
+        )
+
+        # Check required fields
+        if not all([
+            restaurant_id,
+            food,
+            price,
+            payment_method
+        ]):
+
             return "Missing required fields.", 400
 
-        restaurant_data = restaurants.get(int(restaurant_id))
+        # Check restaurant
+        try:
+
+            restaurant_id = int(restaurant_id)
+
+        except ValueError:
+
+            return "Invalid restaurant.", 400
+
+        restaurant_data = restaurants.get(
+            restaurant_id
+        )
+
         if restaurant_data is None:
+
             return "Karinderya not found.", 404
 
+        # Check price
         try:
+
             price = float(price)
+
         except ValueError:
+
             return "Invalid price.", 400
 
+        # Current logged-in user
         username = session["username"]
-        payment_status = "Pay on Pickup" if payment_method == "Cash on Pickup" else "Pending"
+
+        # Payment status
+        if payment_method == "Cash on Pickup":
+
+            payment_status = "Pay on Pickup"
+
+        else:
+
+            payment_status = "Pending"
+
+        # Initial order status
         order_status = "Waiting"
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Date and time
+        created_at = datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
         conn = get_db()
+
+        # Insert order
         cursor = conn.execute(
             """
-            INSERT INTO orders 
-            (username, restaurant_id, restaurant_name, food, price, payment_method, payment_status, order_status, created_at)
+            INSERT INTO orders
+            (
+                username,
+                restaurant_id,
+                restaurant_name,
+                food,
+                price,
+                payment_method,
+                payment_status,
+                order_status,
+                created_at
+            )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (username, int(restaurant_id), restaurant_data["name"], food, price, payment_method, payment_status, order_status, created_at)
+            (
+                username,
+                restaurant_id,
+                restaurant_data["name"],
+                food,
+                price,
+                payment_method,
+                payment_status,
+                order_status,
+                created_at
+            )
         )
+
         conn.commit()
+
         order_id = cursor.lastrowid
+
         conn.close()
 
-        return redirect(url_for("queue", order_id=order_id))
+        # Go to queue page
+        return redirect(
+            url_for(
+                "queue",
+                order_id=order_id
+            )
+        )
 
-    # GET request handler for order confirmation page
-    restaurant_id = request.args.get("restaurant_id")
-    food = request.args.get("food")
-    price = request.args.get("price")
+    # -----------------------------------------------------
+    # GET - ORDER CONFIRMATION PAGE
+    # -----------------------------------------------------
+
+    restaurant_id = request.args.get(
+        "restaurant_id"
+    )
+
+    food = request.args.get(
+        "food"
+    )
+
+    price = request.args.get(
+        "price"
+    )
 
     if not restaurant_id:
+
         return "Restaurant is required.", 400
 
-    restaurant_data = restaurants.get(int(restaurant_id))
+    try:
+
+        restaurant_id = int(restaurant_id)
+
+    except ValueError:
+
+        return "Invalid restaurant.", 400
+
+    restaurant_data = restaurants.get(
+        restaurant_id
+    )
+
     if restaurant_data is None:
+
         return "Karinderya not found.", 404
 
     return render_template(
@@ -266,56 +565,120 @@ def order():
     )
 
 
+# =========================================================
+# ORDER QUEUE
+# =========================================================
+
 @app.route("/queue/<int:order_id>")
 def queue(order_id):
+
+    # User must be logged in
     if "username" not in session:
+
         return redirect(url_for("login"))
 
     conn = get_db()
+
     order_data = conn.execute(
-        "SELECT * FROM orders WHERE id = ? AND username = ?",
-        (order_id, session["username"])
+        """
+        SELECT *
+        FROM orders
+        WHERE id = ?
+        AND username = ?
+        """,
+        (
+            order_id,
+            session["username"]
+        )
     ).fetchone()
+
     conn.close()
 
     if order_data is None:
+
         return "Order not found.", 404
 
-    return render_template("queue.html", order=order_data)
+    return render_template(
+        "queue.html",
+        order=order_data
+    )
 
+
+# =========================================================
+# MY ORDERS
+# =========================================================
 
 @app.route("/orders")
 def orders():
+
+    # User must be logged in
     if "username" not in session:
+
         return redirect(url_for("login"))
 
     conn = get_db()
+
     customer_orders = conn.execute(
-        "SELECT * FROM orders WHERE username = ? ORDER BY id DESC",
-        (session["username"],)
+        """
+        SELECT *
+        FROM orders
+        WHERE username = ?
+        ORDER BY id DESC
+        """,
+        (
+            session["username"],
+        )
     ).fetchall()
+
     conn.close()
 
-    return render_template("orders.html", orders=customer_orders)
+    return render_template(
+        "orders.html",
+        orders=customer_orders
+    )
 
+
+# =========================================================
+# MENU
+# =========================================================
 
 @app.route("/menu")
 def menu():
-    if "username" not in session:
-        return redirect(url_for("login"))
-    return redirect(url_for("nearby"))
 
+    if "username" not in session:
+
+        return redirect(url_for("login"))
+
+    return redirect(
+        url_for("nearby")
+    )
+
+
+# =========================================================
+# LOGOUT
+# =========================================================
 
 @app.route("/logout")
 def logout():
+
     session.clear()
-    return redirect(url_for("home"))
+
+    return redirect(
+        url_for("home")
+    )
 
 
 # =========================================================
 # START APPLICATION
 # =========================================================
 
+# Initialize database when Flask/Gunicorn starts.
+# This is important for Railway deployment.
+init_db()
+
+
 if __name__ == "__main__":
-    init_db()
-    app.run(debug=True)
+
+    app.run(
+        debug=True
+    )
