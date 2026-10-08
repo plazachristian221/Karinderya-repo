@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="flex justify-center items-center py-12">
+    <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full border border-gray-100">
+        <div class="text-center mb-6">
+            <h2 class="text-3xl font-bold text-gray-800">Welcome Back</h2>
+            <p class="text-gray-500 text-sm mt-2">Sign in to find food near you.</p>
+        </div>
+        
+        {% if error %}
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 rounded mb-4 text-sm">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('login') }}" class="space-y-5">
+            <div>
+                <label class="block text-gray-700 font-medium mb-1">Username</label>
+                <input type="text" name="username" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:border-brand outline-none transition" placeholder="Enter your username" required>
+            </div>
+            <div>
+                <label class="block text-gray-700 font-medium mb-1">Password</label>
+                <input type="password" name="password" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:border-brand outline-none transition" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="w-full bg-brand text-white font-bold py-3 rounded-lg shadow hover:bg-orange-700 transition">
+                Login securely
+            </button>
+        </form>
+        
+        <p class="text-center text-sm text-gray-600 mt-6">
+            Don't have an account? <a href="{{ url_for('register') }}" class="text-brand font-bold hover:underline">Sign up</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

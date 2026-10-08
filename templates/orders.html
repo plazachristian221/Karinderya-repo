@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-receipt text-brand mr-2"></i> My Orders</h2>
+    <a href="{{ url_for('nearby') }}" class="bg-brand text-white px-4 py-2 rounded-lg text-sm shadow hover:bg-orange-700">New Order</a>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    {% if orders %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600 text-sm uppercase tracking-wider">
+                    <th class="p-4 border-b">Queue #</th>
+                    <th class="p-4 border-b">Restaurant</th>
+                    <th class="p-4 border-b">Order</th>
+                    <th class="p-4 border-b">Price</th>
+                    <th class="p-4 border-b">Status</th>
+                    <th class="p-4 border-b text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-700">
+                {% for order in orders %}
+                <tr class="hover:bg-gray-50 border-b last:border-0 transition">
+                    <td class="p-4 font-bold text-brand">#{{ order.id }}</td>
+                    <td class="p-4">{{ order.restaurant_name }}</td>
+                    <td class="p-4">{{ order.food }}</td>
+                    <td class="p-4 font-semibold">₱{{ "%.2f"|format(order.price) }}</td>
+                    <td class="p-4">
+                        <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded-full">
+                            {{ order.order_status }}
+                        </span>
+                    </td>
+                    <td class="p-4 text-right">
+                        <a href="{{ url_for('queue', order_id=order.id) }}" class="text-sm text-blue-600 hover:underline">View Ticket</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="p-10 text-center text-gray-500">
+        <i class="fa-solid fa-basket-shopping text-4xl mb-3 text-gray-300"></i>
+        <p>You haven't placed any orders yet.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karinderya App</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { brand: '#ea580c' } // Cool orange theme for food
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
+    <!-- Navbar -->
+    <nav class="bg-brand text-white shadow-md">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <a href="{{ url_for('home') }}" class="text-2xl font-bold tracking-tight">
+                <i class="fa-solid fa-fire-burner mr-2"></i>Lutong Bahay
+            </a>
+            <div class="space-x-4 font-medium flex items-center">
+                {% if session.get('username') %}
+                    <a href="{{ url_for('nearby') }}" class="hover:text-orange-200 transition">Nearby</a>
+                    <a href="{{ url_for('orders') }}" class="hover:text-orange-200 transition">My Orders</a>
+                    <a href="{{ url_for('logout') }}" class="bg-orange-700 px-4 py-2 rounded shadow hover:bg-orange-800 transition">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="text-white hover:text-orange-200 transition">Login</a>
+                    <a href="{{ url_for('register') }}" class="bg-white text-brand px-4 py-2 rounded shadow hover:bg-gray-100 transition">Sign Up</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-6xl mx-auto w-full px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-400 py-6 text-center text-sm">
+        <p>&copy; 2026 Lutong Bahay Express. All rights reserved.</p>
+    </footer>
+</body>
+</html>

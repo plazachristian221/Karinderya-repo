@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-8 flex items-center justify-between bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+    <div>
+        <h2 class="text-3xl font-bold text-gray-800">{{ restaurant.name }}</h2>
+        <p class="text-gray-500"><i class="fa-solid fa-map-pin mr-1"></i> {{ restaurant.address }}</p>
+    </div>
+    <a href="{{ url_for('nearby') }}" class="text-gray-500 hover:text-brand"><i class="fa-solid fa-arrow-left mr-1"></i> Back</a>
+</div>
+
+<h3 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Today's Menu</h3>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% for item in menu %}
+    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-center hover:border-brand transition">
+        <div>
+            <h4 class="text-lg font-bold text-gray-800">{{ item.name }}</h4>
+            <p class="text-brand font-semibold">₱{{ "%.2f"|format(item.price) }}</p>
+        </div>
+        <a href="{{ url_for('order', restaurant_id=restaurant_id, food=item.name, price=item.price) }}" class="px-4 py-2 bg-green-500 text-white text-sm font-bold rounded-lg shadow hover:bg-green-600 transition">
+            Order
+        </a>
+    </div>
+    {% else %}
+    <p class="text-gray-500 italic">No menu items available today.</p>
+    {% endfor %}
+</div>
+{% endblock %}
