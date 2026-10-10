@@ -1,0 +1,58 @@
+
+{% extends "base.html" %}
+{% block title %}Manage Menu | Karinderya{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Menu Management</h1>
+    <a class="btn btn-success" href="{{ url_for('create_item') }}">+ Add Item</a>
+</div>
+
+<div class="table-responsive">
+<table class="table table-bordered table-striped align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th>ID</th><th>Food</th><th>Category</th>
+            <th>Price</th><th>Availability</th><th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for item in items %}
+        <tr>
+            <td>{{ item.id }}</td>
+            <td>
+                {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.name }}"
+                         width="65" height="50" style="object-fit:cover">
+                {% endif %}
+                <strong>{{ item.name }}</strong>
+                <div><small>{{ item.description }}</small></div>
+            </td>
+            <td>{{ item.category }}</td>
+            <td>₱{{ "%.2f"|format(item.price) }}</td>
+            <td>
+                {% if item.available %}
+                    <span class="badge bg-success">Available</span>
+                {% else %}
+                    <span class="badge bg-secondary">Unavailable</span>
+                {% endif %}
+            </td>
+            <td>
+                <a class="btn btn-primary btn-sm mb-1"
+                   href="{{ url_for('edit_item', item_id=item.id) }}">Edit</a>
+                <form method="POST"
+                      action="{{ url_for('delete_item', item_id=item.id) }}"
+                      onsubmit="return confirm('Delete {{ item.name }}?')"
+                      class="d-inline">
+                    <button class="btn btn-danger btn-sm" type="submit">
+                        Delete
+                    </button>
+                </form>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="6" class="text-center">No menu items yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

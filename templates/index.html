@@ -1,10 +1,32 @@
 {% extends "base.html" %}
+{% block title %}Home | Karinderya App{% endblock %}
+
 {% block content %}
-<div class="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
-    <h1 class="text-5xl md:text-6xl font-extrabold text-gray-900">Craving <span class="text-brand">Home-Cooked</span> Meals?</h1>
-    <p class="text-lg text-gray-600 max-w-xl">Find the best local karinderyas near you. Authentic Filipino food, ready for pickup.</p>
-    <a href="{{ url_for('login') }}" class="mt-4 px-8 py-4 bg-brand text-white text-lg font-bold rounded-full shadow-lg hover:bg-orange-700 hover:-translate-y-1 transform transition duration-200">
-        Get Started <i class="fa-solid fa-arrow-right ml-2"></i>
-    </a>
+<div class="p-5 mb-4 bg-white rounded-3 shadow-sm text-center">
+    <div class="container-fluid py-5">
+        <h1 class="display-5 fw-bold text-danger">Welcome to Karinderya App</h1>
+        <p class="col-md-8 mx-auto fs-4">Order delicious home-cooked meals from nearby local karinderyas.</p>
+        {% if not session.get('username') %}
+            <a href="{{ url_for('register') }}" class="btn btn-danger btn-lg mt-3">Get Started</a>
+        {% else %}
+            <a href="{{ url_for('nearby') }}" class="btn btn-danger btn-lg mt-3">Order Now</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mt-5">
+    <h3 class="mb-4 text-center">Featured Menu Items</h3>
+    {% for item in featured %}
+    <div class="col-md-4 mb-3">
+        <div class="card shadow-sm h-100 text-center">
+            <div class="card-body">
+                <h5 class="card-title text-danger">{{ item.name }}</h5>
+                <p class="card-text text-success fw-bold">₱{{ item.price }}</p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <p class="text-center text-muted">No featured items at the moment.</p>
+    {% endfor %}
 </div>
 {% endblock %}

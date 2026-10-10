@@ -1,26 +1,50 @@
+
 {% extends "base.html" %}
+{% block title %}Order Queue | Karinderya{% endblock %}
 {% block content %}
-<div class="max-w-md mx-auto text-center py-10">
-    <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6">
-        <i class="fa-solid fa-check"></i>
-    </div>
-    
-    <h2 class="text-3xl font-bold text-gray-800 mb-2">Order Confirmed!</h2>
-    <p class="text-gray-500 mb-8">Please show this number to the karinderya.</p>
+<h1>Order Queue</h1>
+<p>Review customer orders and update their status.</p>
 
-    <div class="bg-white p-8 rounded-2xl shadow-lg border-2 border-brand border-dashed relative">
-        <p class="text-sm text-gray-500 uppercase tracking-wide font-bold mb-1">Queue Number</p>
-        <p class="text-6xl font-black text-brand mb-4">#{{ order.id }}</p>
-        
-        <div class="text-left bg-gray-50 p-4 rounded-lg text-sm space-y-2">
-            <div class="flex justify-between"><span class="text-gray-500">Restaurant</span> <span class="font-bold">{{ order.restaurant_name }}</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">Item</span> <span class="font-bold">{{ order.food }}</span></div>
-            <div class="flex justify-between"><span class="text-gray-500">Status</span> <span class="text-yellow-600 font-bold"><i class="fa-solid fa-clock mr-1"></i>{{ order.order_status }}</span></div>
-        </div>
-    </div>
-
-    <div class="mt-8">
-        <a href="{{ url_for('orders') }}" class="text-brand font-medium hover:underline">View all my orders</a>
-    </div>
+<div class="table-responsive">
+<table class="table table-bordered table-striped align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th>Order</th><th>Customer</th><th>Food</th>
+            <th>Qty</th><th>Total</th><th>Date</th><th>Status</th><th>Update</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for order in orders %}
+        <tr>
+            <td>#{{ order.id }}</td>
+            <td>{{ order.customer_name }}</td>
+            <td>{{ order.item_name }}</td>
+            <td>{{ order.quantity }}</td>
+            <td>₱{{ "%.2f"|format(order.total) }}</td>
+            <td>{{ order.created_at }}</td>
+            <td>{{ order.status }}</td>
+            <td>
+                <form method="POST"
+                      action="{{ url_for('update_order_status', order_id=order.id) }}">
+                    <select class="form-select form-select-sm mb-2"
+                            name="status" aria-label="Order status">
+                        {% for s in ['Pending', 'Preparing', 'Ready', 'Completed', 'Cancelled'] %}
+                            <option value="{{ s }}"
+                                {% if order.status == s %}selected{% endif %}>
+                                {{ s }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-brand btn-sm" type="submit">
+                        Save
+                    </button>
+                </form>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="8" class="text-center">No orders yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
 </div>
 {% endblock %}

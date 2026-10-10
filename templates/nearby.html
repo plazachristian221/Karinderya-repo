@@ -1,19 +1,21 @@
 {% extends "base.html" %}
-{% block content %}
-<h2 class="text-3xl font-bold text-gray-800 mb-8"><i class="fa-solid fa-location-dot text-brand mr-2"></i> Nearby Karinderyas</h2>
+{% block title %}Nearby Karinderyas{% endblock %}
 
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+{% block content %}
+<h2 class="mb-4">Nearby Karinderyas</h2>
+<div class="row g-4">
     {% for id, details in restaurants.items() %}
-    <a href="{{ url_for('restaurant', restaurant_id=id) }}" class="group block bg-white rounded-xl shadow-sm hover:shadow-xl transition transform hover:-translate-y-1 border border-gray-100 overflow-hidden">
-        <div class="bg-orange-100 h-32 flex items-center justify-center text-brand text-4xl group-hover:scale-105 transition">
-            <i class="fa-solid fa-store"></i>
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body text-center">
+                <h5 class="card-title text-danger fw-bold">{{ details.name }}</h5>
+                <p class="card-text text-muted mb-4">
+                    📍 {{ details.address }}
+                </p>
+                <a href="{{ url_for('restaurant', restaurant_id=id) }}" class="btn btn-outline-danger w-100">View Menu</a>
+            </div>
         </div>
-        <div class="p-5">
-            <h3 class="text-xl font-bold text-gray-800 mb-1">{{ details.name }}</h3>
-            <p class="text-gray-500 text-sm mb-3"><i class="fa-solid fa-map-pin mr-1"></i>{{ details.address }}</p>
-            <span class="text-brand font-medium text-sm">View Menu <i class="fa-solid fa-chevron-right text-xs ml-1"></i></span>
-        </div>
-    </a>
+    </div>
     {% endfor %}
 </div>
 {% endblock %}

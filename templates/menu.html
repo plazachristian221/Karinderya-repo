@@ -1,147 +1,42 @@
-<!DOCTYPE html>
-<html lang="en">
 
-<head>
-
-    <meta charset="UTF-8">
-
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
-
-    <title>Menu - Lutong Bahay Karinderya</title>
-
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css') }}">
-
-</head>
-
-<body>
-
-<header class="navbar">
-
-    <h2>🍚 Lutong Bahay Karinderya</h2>
-
-    <div>
-
-        <a href="{{ url_for('orders') }}">
-            My Orders
-        </a>
-
-        &nbsp;&nbsp;
-
-        <a href="{{ url_for('logout') }}">
-            Logout
-        </a>
-
-    </div>
-
-</header>
-
-
-<main class="menu">
-
-    <h1>Welcome, {{ username }}!</h1>
-
-    <p>Choose your favorite lutong-bahay meal.</p>
-
-
-    <div class="food-container">
-
-
-        <!-- CHICKEN ADOBO -->
-
-        <div class="food-card">
-
-            <h2>🍗 Chicken Adobo</h2>
-
-            <p>
-                Classic Filipino chicken adobo.
-            </p>
-
-            <strong>₱85</strong>
-
-            <a
-                href="{{ url_for('order') }}?food=Chicken%20Adobo&price=85"
-                class="order-button">
-
-                Order
-
-            </a>
-
+{% extends "base.html" %}
+{% block title %}Menu | Karinderya{% endblock %}
+{% block content %}
+<h1>Our Menu</h1>
+<p>Choose your favorite Filipino dishes.</p>
+<div class="row g-4">
+    {% for item in items %}
+        <div class="col-sm-6 col-lg-4">
+            <div class="card h-100 shadow-sm">
+                <img class="food-img"
+                     src="{{ item.image_url or 'https://placehold.co/600x400?text=Food' }}"
+                     alt="{{ item.name }}">
+                <div class="card-body d-flex flex-column">
+                    <span class="badge bg-secondary align-self-start">
+                        {{ item.category }}
+                    </span>
+                    <h5 class="mt-2">{{ item.name }}</h5>
+                    <p>{{ item.description }}</p>
+                    <h5>₱{{ "%.2f"|format(item.price) }}</h5>
+                    <form method="POST" action="{{ url_for('orders') }}"
+                          class="mt-auto">
+                        <input type="hidden" name="item_id" value="{{ item.id }}">
+                        <label class="form-label" for="qty{{ item.id }}">
+                            Quantity
+                        </label>
+                        <input class="form-control mb-3"
+                               type="number" id="qty{{ item.id }}"
+                               name="quantity" value="1" min="1" max="20"
+                               required>
+                        <button class="btn btn-brand w-100" type="submit">
+                            Place Order
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
-
-
-        <!-- BEEF TAPA -->
-
-        <div class="food-card">
-
-            <h2>🥩 Beef Tapa</h2>
-
-            <p>
-                Sweet and savory Filipino beef tapa.
-            </p>
-
-            <strong>₱95</strong>
-
-            <a
-                href="{{ url_for('order') }}?food=Beef%20Tapa&price=95"
-                class="order-button">
-
-                Order
-
-            </a>
-
-        </div>
-
-
-        <!-- FRIED BANGUS -->
-
-        <div class="food-card">
-
-            <h2>🐟 Fried Bangus</h2>
-
-            <p>
-                Crispy Filipino-style fried milkfish.
-            </p>
-
-            <strong>₱90</strong>
-
-            <a
-                href="{{ url_for('order') }}?food=Fried%20Bangus&price=90"
-                class="order-button">
-
-                Order
-
-            </a>
-
-        </div>
-
-
-        <!-- TORTA -->
-
-        <div class="food-card">
-
-            <h2>🥚 Torta</h2>
-
-            <p>
-                Homestyle Filipino egg omelet.
-            </p>
-
-            <strong>₱50</strong>
-
-            <a href="{{ url_for('nearby') }}"
-   class="location-button">
-
-    📍 Find Nearby Karinderyas
-
-</a>
-
-        </div>
-
-
-    </div>
-
-</main>
-
-</body>
-</html>
+    {% else %}
+        <p>No menu items are currently available.</p>
+    {% endfor %}
+</div>
+{% endblock %}

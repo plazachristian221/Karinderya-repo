@@ -1,0 +1,23 @@
+
+{% extends "base.html" %}
+{% block title %}Edit Order | Karinderya{% endblock %}
+{% block content %}
+<div class="card shadow-sm mx-auto" style="max-width:500px">
+<div class="card-body p-4">
+    <h1>Edit Order #{{ order.id }}</h1>
+    <p>Food: <strong>{{ order.item_name }}</strong></p>
+    <p>Price per item: ₱{{ "%.2f"|format(order.item_price) }}</p>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label" for="quantity">Quantity</label>
+            <input class="form-control" type="number" id="quantity"
+                   name="quantity" min="1" max="20"
+                   value="{{ order.quantity }}" required>
+        </div>
+        <button class="btn btn-brand" type="submit">Update Order</button>
+        <a class="btn btn-secondary" href="{{ url_for('orders') }}">Cancel</a>
+    </form>
+</div>
+</div>
+{% endblock %}
