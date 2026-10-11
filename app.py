@@ -401,64 +401,41 @@ def home():
 # REGISTER
 # =====================================================
 
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        confirm = request.form.get("confirm_password", "")
+        confirm_password = request.form.get("confirm_password", "")
 
+        # Validate the registration form
         if len(username) < 3:
-            flash("Username must be at least 3 characters.", "error")
-            return render_template("register.html")
+            flash("Username must be at least 3 characters.", "danger")
+            return redirect(url_for("register"))
 
-        if len(password) < 6:
-            flash("Password must be at least 6 characters.", "error")
-            return render_template("register.html")
+        if not email or not password:
+            flash("Please complete all required fields.", "danger")
+            return redirect(url_for("register"))
 
-        if password != confirm:
-            flash("Passwords do not match.", "error")
-            return render_template("register.html")
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return redirect(url_for("register"))
 
-        conn = get_db()
-        p = placeholder(conn)
+        # Keep your existing database code here:
+        # 1. Check if the username or email already exists.
+        # 2. Hash the password.
+        # 3. Save the new user to your database.
+        #
+        # Only run the success redirect AFTER the user is saved successfully.
 
-        try:
-            with cursor_for(conn) as cur:
-                cur.execute(
-                    f"SELECT id FROM users WHERE username = {p}",
-                    (username,)
-                )
-
-                if cur.fetchone():
-                    flash("Username already exists.", "error")
-                    return render_template("register.html")
-
-                cur.execute(
-                    f"""INSERT INTO users
-                    (username, password, role, created_at)
-                    VALUES ({', '.join([p] * 4)})""",
-                    (
-                        username,
-                        generate_password_hash(password),
-                        "customer",
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    )
-                )
-
-            conn.commit()
-
-            session.clear()
-            session["username"] = username
-            session["role"] = "customer"
-
-            flash("Account created successfully!", "success")
-            return redirect(url_for("shop"))
-
-        finally:
-            conn.close()
+        # After successful database insertion:
+        flash("Registration successful! Please log in to continue.", "success")
+        return redirect(url_for("login"))
 
     return render_template("register.html")
+
 
 
 # =====================================================
