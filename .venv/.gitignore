@@ -1,0 +1,12 @@
+# Local database
+karinderya.db
+*.db
+
+# Python generated files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment secrets
+.env
