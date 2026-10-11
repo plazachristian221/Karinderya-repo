@@ -14,47 +14,110 @@ BASE_DIR = Path(__file__).resolve().parent
 DATABASE = BASE_DIR / "karinderya.db"
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "your_default_secret_key")
 
-# =========================================================
-# FLASK CONFIGURATION
-# =========================================================
+app.secret_key = os.environ.get(
+    "SECRET_KEY",
+    "local-development-only-change-this"
+)
 
+if os.environ.get("RAILWAY_ENVIRONMENT") and not os.environ.get("SECRET_KEY"):
+    raise RuntimeError(
+        "SECRET_KEY must be configured in Railway Variables."
+    )
 # =========================================================
 # RAILWAY DEPLOYMENT CHECK
 # =========================================================
 @app.route("/railway-check", methods=["GET"])
 def railway_check():
-    return "RAILWAY IS RUNNING MY CURRENT APP.PY", 200
+    return {
+        "status": "success",
+        "message": "RAILWAY IS RUNNING THE CURRENT APP.PY",
+        "version": "2.0"
+    }, 200
 
 # =========================================================
 # TEST ROUTE
 # =========================================================
 @app.route("/test", methods=["GET"])
 def test():
-    return "TEST ROUTE IS WORKING", 200
+    return {"status": "success", "message": "Test route is working"}, 200
 
 # =========================================================
 # HEALTH CHECK
 # =========================================================
 @app.route("/health", methods=["GET"])
 def health():
-    return "OK", 200
+    return {"status": "ok"}, 200
 
-
+# =========================================================
+# DATABASE CONNECTION
+# =========================================================
 def get_db():
     database_url = os.environ.get("DATABASE_URL")
+
     if not database_url:
-        print("Warning: DATABASE_URL is not set. Falling back to SQLite for development.")
-        return sqlite3.connect(DATABASE)
+        if os.environ.get("RAILWAY_ENVIRONMENT"):
+            raise RuntimeError(
+                "DATABASE_URL is missing in the Railway environment."
+            )
+
+        # Local development only
+        conn = sqlite3.connect(str(DATABASE))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    # Railway PostgreSQL connection
+    conn = psycopg2.connect(
+        database_url,
+        connect_timeout=10,
+        sslmode="require"
+    )
+    return conn
+
+# =========================================================
+# DATABASE CHECK
+# =========================================================
+@app.route("/db-check", methods=["GET"])
+def db_check():
+    conn = None
 
     try:
-        conn = psycopg2.connect(database_url)
-        return conn
-    except psycopg2.Error as e:
-        print(f"Error connecting to PostgreSQL: {e}")
-        raise
+        conn = get_db()
 
+        if isinstance(conn, sqlite3.Connection):
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()[0]
+            database_type = "sqlite"
+        else:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT current_database(), 1"
+                )
+                row = cursor.fetchone()
+
+            database_type = "postgresql"
+            result = row[1]
+
+        return {
+            "status": "success",
+            "database": database_type,
+            "connected": True,
+            "test_query": result
+        }, 200
+
+    except Exception:
+        app.logger.exception("Database connection test failed")
+
+        return {
+            "status": "error",
+            "connected": False,
+            "message": "Database connection failed. Check Railway logs."
+        }, 500
+
+    finally:
+        if conn is not None:
+            conn.close()
 # Helper function to get columns for SQLite compatibility
 def _table_columns(db_conn, table_name):
     if isinstance(db_conn, sqlite3.Connection):
@@ -680,10 +743,9 @@ def export_excel():
 # =========================================================
 try:
     init_db()
-except Exception as e:
-    print("WARNING: Database initialization failed:")
-    print(e)
-
+    app.logger.info("Database initialization completed.")
+except Exception:
+    app.logger.exception("Database initialization failed.")
 
 # =========================================================
 # START APPLICATION

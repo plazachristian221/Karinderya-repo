@@ -4,5 +4,17 @@
         "."
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.pytestEnabled": true,
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 8080,
+            "driver": "PostgreSQL",
+            "name": "data base",
+            "database": "database_url",
+            "username": "database"
+        }
+    ]
 }
