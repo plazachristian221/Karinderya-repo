@@ -10,6 +10,8 @@ from psycopg2.extras import RealDictCursor
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+
 from flask import (
     Flask, request, render_template, redirect,
     url_for, session, send_file, abort, flash
@@ -202,64 +204,171 @@ def init_db():
                 )
             )
 
-        # Sample products are added only to an empty catalog.
-        cur.execute("SELECT COUNT(*) FROM products")
-        product_count = cur.fetchone()[0]
+        # Add sample products without duplicating existing products.
+        # This also adds the new products to an existing database.
+        samples = [
+            # DRY FOOD
+            (
+                "Puppy Chicken Dry Food 1kg", "Dry Food", "Dog",
+                "Complete dry food for growing puppies.", 249.00, 20, ""
+            ),
+            (
+                "Adult Dog Beef Kibble 1kg", "Dry Food", "Dog",
+                "Everyday food for adult dogs.", 219.00, 25, ""
+            ),
+            (
+                "Kitten Dry Food 1kg", "Dry Food", "Cat",
+                "Dry food for kittens.", 269.00, 18, ""
+            ),
+            (
+                "Adult Cat Food 1kg", "Dry Food", "Cat",
+                "Daily food for adult cats.", 239.00, 22, ""
+            ),
 
-        if product_count == 0:
-            samples = [
-                (
-                    "Puppy Chicken Dry Food 1kg",
-                    "Dry Food", "Dog",
-                    "Complete dry food for growing puppies.",
-                    249.00, 20, ""
-                ),
-                (
-                    "Adult Dog Beef Kibble 1kg",
-                    "Dry Food", "Dog",
-                    "Everyday food for adult dogs.",
-                    219.00, 25, ""
-                ),
-                (
-                    "Kitten Dry Food 1kg",
-                    "Dry Food", "Cat",
-                    "Dry food for kittens.",
-                    269.00, 18, ""
-                ),
-                (
-                    "Adult Cat Food 1kg",
-                    "Dry Food", "Cat",
-                    "Daily food for adult cats.",
-                    239.00, 22, ""
-                ),
-                (
-                    "Chicken Flavor Pet Treats",
-                    "Treats", "Dog",
-                    "Reward treats for dogs.",
-                    89.00, 30, ""
-                ),
-                (
-                    "Catnip Toy",
-                    "Pet Supplies", "Cat",
-                    "A toy for cat playtime.",
-                    99.00, 15, ""
-                )
-            ]
+            # WET FOOD
+            (
+                "Premium Chicken Wet Food", "Wet Food", "Dog",
+                "Tender chicken wet food for adult dogs.",
+                85.00, 30, ""
+            ),
+            (
+                "Tuna Wet Food", "Wet Food", "Cat",
+                "Delicious tuna wet food for cats.",
+                65.00, 25, ""
+            ),
+            (
+                "Salmon Pate Wet Food", "Wet Food", "Cat",
+                "Smooth salmon pate for adult cats.",
+                75.00, 20, ""
+            ),
+            (
+                "Beef and Liver Wet Food", "Wet Food", "Dog",
+                "Savory beef and liver wet food for dogs.",
+                95.00, 20, ""
+            ),
+            (
+                "Ocean Fish Wet Food", "Wet Food", "Both",
+                "Fish-based wet food for cats and dogs.",
+                89.00, 15, ""
+            ),
+            (
+                "Chicken Gravy Cat Food", "Wet Food", "Cat",
+                "Chicken pieces in gravy for cats.",
+                79.00, 24, ""
+            ),
+            (
+                "Lamb Wet Food", "Wet Food", "Dog",
+                "Lamb-flavored wet food for dogs.",
+                99.00, 18, ""
+            ),
+            (
+                "Salmon and Chicken Wet Food", "Wet Food", "Both",
+                "A salmon and chicken wet food option for pets.",
+                92.00, 20, ""
+            ),
 
-            for item in samples:
-                cur.execute(
-                    f"""INSERT INTO products
-                    (name, category, pet_type, description,
-                     price, stock, image_url, created_at)
-                    VALUES ({', '.join([p] * 8)})""",
-                    item + (
-                        datetime.now().strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
-                    )
+            # TREATS
+            (
+                "Chicken Flavor Pet Treats", "Treats", "Dog",
+                "Reward treats for dogs.",
+                89.00, 30, ""
+            ),
+            (
+                "Crunchy Cat Treats", "Treats", "Cat",
+                "Crunchy treats for cats.",
+                69.00, 25, ""
+            ),
+            (
+                "Mixed Pet Biscuits", "Treats", "Both",
+                "Biscuits suitable for cats and dogs when appropriate.",
+                79.00, 20, ""
+            ),
+
+            # PET SUPPLIES
+            (
+                "Catnip Toy", "Pet Supplies", "Cat",
+                "A toy for cat playtime.",
+                99.00, 15, ""
+            ),
+            (
+                "Rubber Dog Chew Toy", "Pet Supplies", "Dog",
+                "A chew toy for supervised dog play.",
+                129.00, 15, ""
+            ),
+            (
+                "Adjustable Dog Collar", "Pet Supplies", "Dog",
+                "An adjustable collar for everyday walks.",
+                149.00, 12, ""
+            ),
+            (
+                "Pet Leash", "Pet Supplies", "Both",
+                "A leash for walking compatible pets.",
+                179.00, 12, ""
+            ),
+            (
+                "Stainless Steel Pet Bowl", "Pet Supplies", "Both",
+                "A reusable bowl for pet food and water.",
+                119.00, 20, ""
+            ),
+            (
+                "Pet Food Storage Container", "Pet Supplies", "Both",
+                "A container for storing dry pet food.",
+                199.00, 10, ""
+            ),
+            (
+                "Pet Grooming Brush", "Pet Supplies", "Both",
+                "A brush for routine pet grooming.",
+                139.00, 12, ""
+            ),
+            (
+                "Pet Shampoo 250ml", "Pet Supplies", "Both",
+                "Pet shampoo for suitable coats and skin.",
+                159.00, 15, ""
+            ),
+            (
+                "Cat Litter 5kg", "Pet Supplies", "Cat",
+                "Cat litter for household litter trays.",
+                199.00, 20, ""
+            ),
+            (
+                "Pet Carrier Bag", "Pet Supplies", "Both",
+                "A carrier for transporting compatible pets.",
+                499.00, 5, ""
+            ),
+            (
+                "Pet Nail Clipper", "Pet Supplies", "Both",
+                "A nail clipper designed for pet grooming.",
+                129.00, 10, ""
+            ),
+            (
+                "Pet Waste Bags", "Pet Supplies", "Dog",
+                "Waste bags for cleaning up during walks.",
+                49.00, 30, ""
+            ),
+        ]
+
+        for item in samples:
+            cur.execute(
+                f"SELECT id FROM products WHERE name = {p}",
+                (item[0],)
+            )
+
+            # Skip products that already exist.
+            if cur.fetchone():
+                continue
+
+            cur.execute(
+                f"""INSERT INTO products
+                (name, category, pet_type, description,
+                 price, stock, image_url, created_at)
+                VALUES ({', '.join([p] * 8)})""",
+                item + (
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
+            )
 
         conn.commit()
+
 
     finally:
         conn.close()
