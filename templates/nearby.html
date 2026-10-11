@@ -1,56 +1,124 @@
 
 {% extends "base.html" %}
 
-{% block title %}Nearby Pet Stores | PawMart{% endblock %}
+{% block title %}Nearby PawMart Branches | PawMart{% endblock %}
 
 {% block head %}
-<link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
->
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
 <style>
+    .branch-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 18px;
+        margin-bottom: 14px;
+        background: #fff;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .branch-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    }
+
+    .branch-card h5 {
+        margin-bottom: 8px;
+        font-weight: 700;
+    }
+
+    .branch-distance {
+        color: #198754;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
     #map {
+        height: 430px;
         width: 100%;
-        height: 400px;
-        border-radius: 12px;
-        background: #f1f1f1;
+        border-radius: 14px;
+        z-index: 1;
+    }
+
+    .demo-notice {
+        background: #fff8e1;
+        border: 1px solid #ffe082;
+        padding: 12px 15px;
+        border-radius: 10px;
+        font-size: 0.9rem;
+    }
+
+    .branch-link {
+        cursor: pointer;
+        color: #198754;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .branch-link:hover {
+        text-decoration: underline;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <h1 class="page-title">📍 Nearby Pet Stores</h1>
+<div class="py-4">
 
-    <p>
-        Find pet stores near your location to buy pet food,
-        treats, toys, and other pet supplies.
-    </p>
-
-    <div class="info-card">
-        <h4>Find Pet Stores Near You</h4>
-        <p>
-            Click below and allow your browser to access your location.
+    <div class="mb-4">
+        <h1 class="page-title">📍 Nearby PawMart Branches</h1>
+        <p class="text-muted">
+            Find a suggested PawMart branch near your area.
+            Select a location to view it on the map or get directions.
         </p>
-
-        <button
-            type="button"
-            id="locationBtn"
-            class="btn btn-paw"
-            onclick="findNearby()"
-        >
-            Use My Location
-        </button>
-
-        <p
-            id="location-result"
-            class="mt-3"
-            role="status"
-            aria-live="polite"
-        ></p>
     </div>
 
-    <div id="map" class="mt-4"></div>
+    <div class="demo-notice mb-4">
+        <strong>Demo locations:</strong>
+        These are sample branch locations for the PawMart project,
+        not verified or operating physical stores.
+    </div>
+
+    <div class="card border-0 shadow-sm p-3 mb-4">
+        <h5>Find a Branch Near You</h5>
+        <p class="text-muted mb-3">
+            Allow location access to sort the suggested branches
+            by distance from you.
+        </p>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button"
+                    class="btn btn-success"
+                    onclick="findNearby()">
+                <i class="bi bi-geo-alt-fill"></i>
+                Use My Location
+            </button>
+
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    onclick="showAllBranches()">
+                Show All Branches
+            </button>
+        </div>
+
+        <p id="location-result" class="mt-3 mb-0" aria-live="polite"></p>
+    </div>
+
+    <div class="row g-4">
+
+        <div class="col-lg-5">
+            <h4 class="mb-3">Suggested Branches</h4>
+            <div id="branch-list"></div>
+        </div>
+
+        <div class="col-lg-7">
+            <h4 class="mb-3">Branch Map</h4>
+            <div id="map"></div>
+            <p class="text-muted small mt-2">
+                Map data © OpenStreetMap contributors.
+            </p>
+        </div>
+
+    </div>
 </div>
 {% endblock %}
 
@@ -58,97 +126,290 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-let pawMap = null;
-let userMarker = null;
+const branches = [
+    {
+        id: 1,
+        name: "PawMart Cainta Branch",
+        area: "Cainta, Rizal",
+        lat: 14.5774,
+        lng: 121.1222,
+        description: "Suggested branch for customers in Cainta."
+    },
+    {
+        id: 2,
+        name: "PawMart Taytay Branch",
+        area: "Taytay, Rizal",
+        lat: 14.5585,
+        lng: 121.1324,
+        description: "Suggested branch for customers in Taytay."
+    },
+    {
+        id: 3,
+        name: "PawMart Antipolo Branch",
+        area: "Antipolo, Rizal",
+        lat: 14.5865,
+        lng: 121.1760,
+        description: "Suggested branch for customers in Antipolo."
+    },
+    {
+        id: 4,
+        name: "PawMart Pasig Branch",
+        area: "Pasig City",
+        lat: 14.5764,
+        lng: 121.0851,
+        description: "Suggested branch for customers in Pasig."
+    },
+    {
+        id: 5,
+        name: "PawMart Marikina Branch",
+        area: "Marikina City",
+        lat: 14.6507,
+        lng: 121.1029,
+        description: "Suggested branch for customers in Marikina."
+    }
+];
+
+let map = null;
+let branchMarkers = {};
+let customerMarker = null;
+let customerLocation = null;
+
+function initializeMap() {
+    if (typeof L === "undefined") {
+        document.getElementById("location-result").textContent =
+            "The map could not load. Please check your internet connection.";
+        return false;
+    }
+
+    if (map) {
+        return true;
+    }
+
+    map = L.map("map").setView([14.5774, 121.1222], 11);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 19
+    }).addTo(map);
+
+    branches.forEach(function(branch) {
+        const marker = L.marker([branch.lat, branch.lng]).addTo(map);
+
+        marker.bindPopup(
+            "<strong>" + branch.name + "</strong><br>" +
+            branch.area + "<br>" +
+            "<em>Suggested demo location</em><br>" +
+            '<a href="https://www.google.com/maps/dir/?api=1&destination=' +
+            branch.lat + "," + branch.lng +
+            '" target="_blank" rel="noopener noreferrer">Get directions</a>'
+        );
+
+        branchMarkers[branch.id] = marker;
+    });
+
+    setTimeout(function() {
+        map.invalidateSize();
+    }, 100);
+
+    return true;
+}
+
+function distanceKm(lat1, lon1, lat2, lon2) {
+    const earthRadius = 6371;
+    const toRadians = function(degrees) {
+        return degrees * Math.PI / 180;
+    };
+
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRadians(lat1)) *
+        Math.cos(toRadians(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    return earthRadius * 2 *
+        Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function renderBranches(list) {
+    const container = document.getElementById("branch-list");
+    container.innerHTML = "";
+
+    list.forEach(function(branch) {
+        const card = document.createElement("div");
+        card.className = "branch-card";
+
+        const title = document.createElement("h5");
+        title.textContent = "📍 " + branch.name;
+
+        const area = document.createElement("p");
+        area.className = "text-muted mb-2";
+        area.textContent = branch.area;
+
+        const description = document.createElement("p");
+        description.className = "mb-2";
+        description.textContent = branch.description;
+
+        card.appendChild(title);
+        card.appendChild(area);
+        card.appendChild(description);
+
+        if (branch.distance !== undefined) {
+            const distance = document.createElement("p");
+            distance.className = "branch-distance mb-2";
+            distance.textContent =
+                "Approximately " + branch.distance.toFixed(1) +
+                " km away (straight-line distance)";
+            card.appendChild(distance);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "d-flex flex-wrap gap-3";
+
+        const viewLink = document.createElement("a");
+        viewLink.href = "#map";
+        viewLink.className = "branch-link";
+        viewLink.textContent = "View on Map";
+        viewLink.addEventListener("click", function(event) {
+            event.preventDefault();
+            viewBranch(branch.id);
+        });
+
+        const directionsLink = document.createElement("a");
+        directionsLink.className = "branch-link";
+        directionsLink.href =
+            "https://www.google.com/maps/dir/?api=1&destination=" +
+            branch.lat + "," + branch.lng;
+        directionsLink.target = "_blank";
+        directionsLink.rel = "noopener noreferrer";
+        directionsLink.textContent = "Get Directions";
+
+        actions.appendChild(viewLink);
+        actions.appendChild(directionsLink);
+        card.appendChild(actions);
+        container.appendChild(card);
+    });
+}
+
+function viewBranch(branchId) {
+    if (!initializeMap()) return;
+
+    const branch = branches.find(function(item) {
+        return item.id === branchId;
+    });
+
+    if (!branch) return;
+
+    map.setView([branch.lat, branch.lng], 15);
+    branchMarkers[branchId].openPopup();
+
+    document.getElementById("map").scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
+}
+
+function showAllBranches() {
+    document.getElementById("location-result").textContent =
+        "Showing all suggested demo branches.";
+
+    renderBranches(branches);
+
+    if (initializeMap()) {
+        map.setView([14.5774, 121.1222], 11);
+        setTimeout(function() {
+            map.invalidateSize();
+        }, 100);
+    }
+}
 
 function findNearby() {
     const result = document.getElementById("location-result");
-    const button = document.getElementById("locationBtn");
-
-    if (!window.isSecureContext) {
-        result.textContent =
-            "Location requires a secure HTTPS website.";
-        return;
-    }
 
     if (!navigator.geolocation) {
         result.textContent =
-            "Your browser does not support location services.";
+            "Your browser does not support location access.";
         return;
     }
 
-    result.textContent = "Requesting your location...";
-    button.disabled = true;
+    if (!window.isSecureContext) {
+        result.textContent =
+            "Location access requires a secure HTTPS website.";
+        return;
+    }
+
+    result.textContent = "Getting your location. Please allow access.";
 
     navigator.geolocation.getCurrentPosition(
         function(position) {
             const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
+            const lng = position.coords.longitude;
+
+            customerLocation = { lat: lat, lng: lng };
+
+            branches.forEach(function(branch) {
+                branch.distance = distanceKm(
+                    lat, lng, branch.lat, branch.lng
+                );
+            });
+
+            branches.sort(function(a, b) {
+                return a.distance - b.distance;
+            });
 
             result.textContent =
-                "Location found: " +
-                lat.toFixed(5) + ", " + lon.toFixed(5);
+                "Location found! Suggested branches are sorted from nearest to farthest. " +
+                "These distances are estimates, not driving distances.";
 
-            if (typeof L === "undefined") {
-                result.textContent +=
-                    " However, the map library did not load.";
-                button.disabled = false;
-                return;
+            renderBranches(branches);
+
+            if (!initializeMap()) return;
+
+            if (customerMarker) {
+                map.removeLayer(customerMarker);
             }
 
-            if (!pawMap) {
-                pawMap = L.map("map").setView([lat, lon], 14);
+            customerMarker = L.marker([lat, lng])
+                .addTo(map)
+                .bindPopup("Your current location");
 
-                L.tileLayer(
-                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                    {
-                        attribution:
-                            "&copy; OpenStreetMap contributors"
-                    }
-                ).addTo(pawMap);
-            } else {
-                pawMap.setView([lat, lon], 14);
-            }
+            customerMarker.openPopup();
 
-            if (userMarker) {
-                userMarker.setLatLng([lat, lon]);
-            } else {
-                userMarker = L.marker([lat, lon]).addTo(pawMap);
-            }
+            const bounds = L.latLngBounds([[lat, lng]]);
 
-            userMarker
-                .bindPopup("Your current location")
-                .openPopup();
+            branches.forEach(function(branch) {
+                bounds.extend([branch.lat, branch.lng]);
+            });
 
-            setTimeout(function() {
-                pawMap.invalidateSize();
-            }, 100);
-
-            button.disabled = false;
+            map.fitBounds(bounds, { padding: [25, 25] });
         },
         function(error) {
             if (error.code === 1) {
                 result.textContent =
-                    "Location permission denied. Click the site settings icon beside your website address, set Location to Allow, then reload.";
+                    "Location permission was denied. Allow location access in your browser settings, or choose Show All Branches.";
             } else if (error.code === 2) {
                 result.textContent =
-                    "Your location is unavailable. Check your device's location services.";
+                    "Your location is currently unavailable. Please try again or choose Show All Branches.";
             } else if (error.code === 3) {
                 result.textContent =
-                    "The location request timed out. Please try again.";
+                    "Location request timed out. Please try again.";
             } else {
                 result.textContent =
-                    "Could not retrieve your location. Please try again.";
+                    "Could not get your location. You can still browse all suggested branches.";
             }
-
-            button.disabled = false;
         },
         {
-            enableHighAccuracy: true,
+            enableHighAccuracy: false,
             timeout: 15000,
             maximumAge: 60000
         }
     );
 }
+
+document.addEventListener("DOMContentLoaded", function() {
+    showAllBranches();
+});
 </script>
 {% endblock %}
