@@ -84,102 +84,30 @@ def init_db():
     try:
         cur = conn.cursor()
 
+     
+        # Add email column to existing databases if needed.
         if is_sqlite(conn):
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password TEXT NOT NULL,
-                    role TEXT NOT NULL DEFAULT 'customer',
-                    created_at TEXT NOT NULL
-                )
-            """)
-
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS products (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    pet_type TEXT NOT NULL,
-                    description TEXT NOT NULL DEFAULT '',
-                    price REAL NOT NULL,
-                    stock INTEGER NOT NULL DEFAULT 0,
-                    image_url TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL
-                )
-            """)
-
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS pet_orders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL,
-                    product_id INTEGER NOT NULL,
-                    product_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    unit_price REAL NOT NULL,
-                    total_price REAL NOT NULL,
-                    payment_method TEXT NOT NULL,
-                    payment_status TEXT NOT NULL,
-                    order_status TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-            """)
-
             cur.execute("PRAGMA table_info(users)")
             columns = {row[1] for row in cur.fetchall()}
 
-            if "role" not in columns:
-                cur.execute("""
-                    ALTER TABLE users
-                    ADD COLUMN role TEXT NOT NULL DEFAULT 'customer'
-                """)
+            if "email" not in columns:
+                cur.execute("ALTER TABLE users ADD COLUMN email TEXT")
 
+            cur.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
+                ON users(email)
+            """)
         else:
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username TEXT UNIQUE NOT NULL,
-                    password TEXT NOT NULL,
-                    role TEXT NOT NULL DEFAULT 'customer',
-                    created_at TEXT NOT NULL
-                )
-            """)
-
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS products (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    pet_type TEXT NOT NULL,
-                    description TEXT NOT NULL DEFAULT '',
-                    price NUMERIC(10,2) NOT NULL,
-                    stock INTEGER NOT NULL DEFAULT 0,
-                    image_url TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL
-                )
-            """)
-
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS pet_orders (
-                    id SERIAL PRIMARY KEY,
-                    username TEXT NOT NULL,
-                    product_id INTEGER NOT NULL,
-                    product_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    unit_price NUMERIC(10,2) NOT NULL,
-                    total_price NUMERIC(10,2) NOT NULL,
-                    payment_method TEXT NOT NULL,
-                    payment_status TEXT NOT NULL,
-                    order_status TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-            """)
-
-            cur.execute("""
                 ALTER TABLE users
-                ADD COLUMN IF NOT EXISTS role
-                TEXT NOT NULL DEFAULT 'customer'
+                ADD COLUMN IF NOT EXISTS email TEXT
             """)
+
+            cur.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
+                ON users(email)
+            """)
+
 
         # Create the administrator account if it does not exist.
         cur.execute(
@@ -402,6 +330,7 @@ def home():
 # =====================================================
 
 
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -410,37 +339,82 @@ def register():
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        # Validate the registration form
         if len(username) < 3:
             flash("Username must be at least 3 characters.", "danger")
             return redirect(url_for("register"))
 
-        if not email or not password:
-            flash("Please complete all required fields.", "danger")
+        if not email or "@" not in email:
+            flash("Please enter a valid email address.", "danger")
+            return redirect(url_for("register"))
+
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "danger")
             return redirect(url_for("register"))
 
         if password != confirm_password:
             flash("Passwords do not match.", "danger")
             return redirect(url_for("register"))
 
-        # Keep your existing database code here:
-        # 1. Check if the username or email already exists.
-        # 2. Hash the password.
-        # 3. Save the new user to your database.
-        #
-        # Only run the success redirect AFTER the user is saved successfully.
+        conn = get_db()
+        p = placeholder(conn)
 
-        # After successful database insertion:
-        flash("Registration successful! Please log in to continue.", "success")
+        try:
+            with cursor_for(conn) as cur:
+                cur.execute(
+                    f"""SELECT id FROM users
+                        WHERE username = {p} OR email = {p}""",
+                    (username, email)
+                )
+
+                if cur.fetchone():
+                    flash(
+                        "That username or email is already registered.",
+                        "danger"
+                    )
+                    return redirect(url_for("register"))
+
+                cur.execute(
+                    f"""INSERT INTO users
+                        (username, email, password, role, created_at)
+                        VALUES ({', '.join([p] * 5)})""",
+                    (
+                        username,
+                        email,
+                        generate_password_hash(password),
+                        "customer",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    )
+                )
+
+            conn.commit()
+
+        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
+            conn.rollback()
+            flash(
+                "That username or email is already registered.",
+                "danger"
+            )
+            return redirect(url_for("register"))
+
+        finally:
+            conn.close()
+
+        flash(
+            "Registration successful! Please log in to continue.",
+            "success"
+        )
         return redirect(url_for("login"))
 
     return render_template("register.html")
 
 
 
+
 # =====================================================
 # LOGIN
 # =====================================================
+
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -458,6 +432,7 @@ def login():
                     (username,)
                 )
                 user = cur.fetchone()
+
         finally:
             conn.close()
 
@@ -466,15 +441,17 @@ def login():
             session["username"] = user["username"]
             session["role"] = user["role"]
 
+            flash("Login successful!", "success")
+
             if user["role"] == "admin":
                 return redirect(url_for("admin_dashboard"))
 
             return redirect(url_for("shop"))
 
-        flash("Invalid username or password.", "error")
+        flash("Invalid username or password.", "danger")
+        return redirect(url_for("login"))
 
     return render_template("login.html")
-
 
 # =====================================================
 # ADMIN ACCESS CONTROL
