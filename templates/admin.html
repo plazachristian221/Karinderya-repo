@@ -1,37 +1,453 @@
-
 {% extends "base.html" %}
-{% block title %}Admin Dashboard | Karinderya{% endblock %}
+
+{% block title %}Admin Dashboard | PawMart{% endblock %}
+
+{% block head %}
+<style>
+    .admin-card {
+        border: none;
+        border-radius: 14px;
+        box-shadow: 0 3px 12px #0000000c;
+    }
+
+    .admin-section {
+        margin-top: 35px;
+        margin-bottom: 25px;
+    }
+
+    .table th {
+        white-space: nowrap;
+    }
+
+    .admin-form {
+        min-width: 260px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>Admin Dashboard</h1>
-<p>Welcome to your Karinderya management system.</p>
 
+<div class="d-flex flex-wrap justify-content-between
+            align-items-center gap-3 mb-4">
+    <div>
+        <h1 class="page-title mb-1">Admin Dashboard</h1>
+        <p class="text-muted mb-0">
+            Manage your PawMart pet store.
+        </p>
+    </div>
+
+    <a href="{{ url_for('export_excel') }}"
+       class="btn btn-success">
+        📊 Export to Excel
+    </a>
+</div>
+
+<!-- DASHBOARD SUMMARY -->
 <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm"><div class="card-body">
-            <h6>Menu Items</h6><h2>{{ total_items }}</h2>
-        </div></div>
+    <div class="col-md-4">
+        <div class="card admin-card p-4">
+            <p class="text-muted mb-1">Total Products</p>
+            <h2 class="fw-bold">{{ products|length }}</h2>
+        </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm"><div class="card-body">
-            <h6>Total Orders</h6><h2>{{ total_orders }}</h2>
-        </div></div>
+
+    <div class="col-md-4">
+        <div class="card admin-card p-4">
+            <p class="text-muted mb-1">Total Orders</p>
+            <h2 class="fw-bold">{{ orders|length }}</h2>
+        </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm"><div class="card-body">
-            <h6>Customers</h6><h2>{{ total_customers }}</h2>
-        </div></div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm"><div class="card-body">
-            <h6>Pending Orders</h6><h2>{{ pending_orders }}</h2>
-        </div></div>
+
+    <div class="col-md-4">
+        <div class="card admin-card p-4">
+            <p class="text-muted mb-1">Registered Users</p>
+            <h2 class="fw-bold">{{ users|length }}</h2>
+        </div>
     </div>
 </div>
 
-<div class="d-flex flex-wrap gap-2">
-    <a class="btn btn-brand" href="{{ url_for('admin_items') }}">Manage Menu</a>
-    <a class="btn btn-success" href="{{ url_for('create_item') }}">Add Menu Item</a>
-    <a class="btn btn-primary" href="{{ url_for('queue') }}">Manage Orders</a>
-    <a class="btn btn-outline-dark" href="{{ url_for('home') }}">View Website</a>
-</div>
+
+<!-- ADD PRODUCT -->
+<section class="admin-section" id="add-product">
+    <div class="card admin-card p-4">
+        <h3 class="page-title mb-3">➕ Add New Product</h3>
+
+        <form method="POST"
+              action="{{ url_for('add_product') }}">
+            <div class="row g-3">
+
+                <div class="col-md-6">
+                    <label class="form-label">Product Name</label>
+                    <input type="text" name="name"
+                           class="form-control" maxlength="200"
+                           required>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Category</label>
+                    <select name="category" class="form-select" required>
+                        <option value="">Select Category</option>
+                        <option value="Dry Food">Dry Food</option>
+                        <option value="Wet Food">Wet Food</option>
+                        <option value="Treats">Treats</option>
+                        <option value="Pet Supplies">Pet Supplies</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Pet Type</label>
+                    <select name="pet_type" class="form-select" required>
+                        <option value="">Select Pet</option>
+                        <option value="Dog">Dog</option>
+                        <option value="Cat">Cat</option>
+                        <option value="Both">Both</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Price (₱)</label>
+                    <input type="number" name="price"
+                           class="form-control"
+                           min="0.01" step="0.01" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Stock</label>
+                    <input type="number" name="stock"
+                           class="form-control"
+                           min="0" step="1" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Image URL</label>
+                    <input type="url" name="image_url"
+                           class="form-control"
+                           placeholder="https://example.com/image.jpg">
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Description</label>
+                    <textarea name="description"
+                              class="form-control"
+                              rows="3" maxlength="2000"></textarea>
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" class="btn btn-paw">
+                        Add Product
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</section>
+
+
+<!-- PRODUCT MANAGEMENT -->
+<section class="admin-section">
+    <h3 class="page-title mb-3">📦 Manage Products</h3>
+
+    <div class="card admin-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Product</th>
+                        <th>Category</th>
+                        <th>Pet Type</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Edit Product</th>
+                        <th>Delete</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td>{{ product['id'] }}</td>
+                        <td>
+                            <strong>{{ product['name'] }}</strong>
+                            <div class="small text-muted">
+                                {{ product['description'] }}
+                            </div>
+                        </td>
+                        <td>{{ product['category'] }}</td>
+                        <td>{{ product['pet_type'] }}</td>
+                        <td>₱{{ "%.2f"|format(product['price']) }}</td>
+                        <td>{{ product['stock'] }}</td>
+
+                        <td>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#edit-{{ product['id'] }}">
+                                Edit
+                            </button>
+                        </td>
+
+                        <td>
+                            <form method="POST"
+                                  action="{{ url_for(
+                                      'delete_product',
+                                      product_id=product['id']
+                                  ) }}"
+                                  onsubmit="return confirm(
+                                      'Delete this product?'
+                                  );">
+                                <button type="submit"
+                                        class="btn btn-sm btn-danger">
+                                    Delete
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+
+                    <!-- EDIT PRODUCT FORM -->
+                    <tr class="collapse"
+                        id="edit-{{ product['id'] }}">
+                        <td colspan="8">
+                            <div class="admin-form p-2">
+                                <h6 class="fw-bold mb-3">
+                                    Edit: {{ product['name'] }}
+                                </h6>
+
+                                <form method="POST"
+                                      action="{{ url_for(
+                                          'edit_product',
+                                          product_id=product['id']
+                                      ) }}">
+                                    <div class="row g-3">
+
+                                        <div class="col-md-6">
+                                            <label class="form-label">
+                                                Product Name
+                                            </label>
+                                            <input type="text" name="name"
+                                                   class="form-control"
+                                                   value="{{ product['name'] }}"
+                                                   required>
+                                        </div>
+
+                                        <div class="col-md-3">
+                                            <label class="form-label">
+                                                Category
+                                            </label>
+                                            <select name="category"
+                                                    class="form-select"
+                                                    required>
+                                                {% for item in [
+                                                    'Dry Food', 'Wet Food',
+                                                    'Treats', 'Pet Supplies'
+                                                ] %}
+                                                <option value="{{ item }}"
+                                                    {% if product['category'] == item %}
+                                                        selected
+                                                    {% endif %}>
+                                                    {{ item }}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-3">
+                                            <label class="form-label">
+                                                Pet Type
+                                            </label>
+                                            <select name="pet_type"
+                                                    class="form-select"
+                                                    required>
+                                                {% for item in [
+                                                    'Dog', 'Cat', 'Both'
+                                                ] %}
+                                                <option value="{{ item }}"
+                                                    {% if product['pet_type'] == item %}
+                                                        selected
+                                                    {% endif %}>
+                                                    {{ item }}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label class="form-label">
+                                                Price (₱)
+                                            </label>
+                                            <input type="number" name="price"
+                                                   class="form-control"
+                                                   min="0.01" step="0.01"
+                                                   value="{{ product['price'] }}"
+                                                   required>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label class="form-label">
+                                                Stock
+                                            </label>
+                                            <input type="number" name="stock"
+                                                   class="form-control"
+                                                   min="0" step="1"
+                                                   value="{{ product['stock'] }}"
+                                                   required>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label class="form-label">
+                                                Image URL
+                                            </label>
+                                            <input type="url" name="image_url"
+                                                   class="form-control"
+                                                   value="{{ product['image_url'] }}">
+                                        </div>
+
+                                        <div class="col-12">
+                                            <label class="form-label">
+                                                Description
+                                            </label>
+                                            <textarea name="description"
+                                                      class="form-control"
+                                                      rows="3"
+                                                      required>{{ product['description'] }}</textarea>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <button type="submit"
+                                                    class="btn btn-primary">
+                                                Save Changes
+                                            </button>
+
+                                            <button type="button"
+                                                    class="btn btn-secondary"
+                                                    data-bs-toggle="collapse"
+                                                    data-bs-target="#edit-{{ product['id'] }}">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4">
+                            No products available.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+
+<!-- ORDER MANAGEMENT: VIEW ONLY -->
+<section class="admin-section">
+    <h3 class="page-title mb-3">🛒 Customer Orders</h3>
+
+    <div class="card admin-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Total</th>
+                        <th>Payment Method</th>
+                        <th>Payment Status</th>
+                        <th>Order Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td>#{{ order['id'] }}</td>
+                        <td>{{ order['username'] }}</td>
+                        <td>{{ order['product_name'] }}</td>
+                        <td>{{ order['quantity'] }}</td>
+                        <td>
+                            ₱{{ "%.2f"|format(order['total_price']) }}
+                        </td>
+                        <td>{{ order['payment_method'] }}</td>
+                        <td>
+                            <span class="badge text-bg-warning">
+                                {{ order['payment_status'] }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge text-bg-info">
+                                {{ order['order_status'] }}
+                            </span>
+                        </td>
+                        <td>{{ order['created_at'] }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-4">
+                            No orders have been placed.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+
+<!-- REGISTERED USERS -->
+<section class="admin-section">
+    <h3 class="page-title mb-3">👥 Registered Users</h3>
+
+    <div class="card admin-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user['id'] }}</td>
+                        <td>{{ user['username'] }}</td>
+                        <td>
+                            {% if user['role'] == 'admin' %}
+                                <span class="badge text-bg-danger">
+                                    Administrator
+                                </span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">
+                                    Customer
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user['created_at'] }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4">
+                            No registered users found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
 {% endblock %}

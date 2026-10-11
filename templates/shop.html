@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Shop | PawMart{% endblock %}
+
+{% block content %}
+<h1 class="page-title mb-2">Our Pet Shop 🐾</h1>
+<p class="text-muted">Find the best products for your pets.</p>
+
+<form method="GET" action="{{ url_for('shop') }}"
+      class="card border-0 shadow-sm p-3 mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label">Category</label>
+            <select name="category" class="form-select">
+                <option value="">All Categories</option>
+                {% for item in ['Dry Food', 'Wet Food', 'Treats', 'Pet Supplies'] %}
+                    <option value="{{ item }}"
+                        {% if category == item %}selected{% endif %}>
+                        {{ item }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-5">
+            <label class="form-label">Pet Type</label>
+            <select name="pet_type" class="form-select">
+                <option value="">All Pets</option>
+                {% for item in ['Dog', 'Cat', 'Both'] %}
+                    <option value="{{ item }}"
+                        {% if pet_type == item %}selected{% endif %}>
+                        {{ item }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <button class="btn btn-paw w-100" type="submit">
+                Filter
+            </button>
+        </div>
+    </div>
+
+    <div class="mt-2">
+        <a href="{{ url_for('shop') }}" class="text-muted">
+            Clear filters
+        </a>
+    </div>
+</form>
+
+<div class="row g-4">
+    {% for product in products %}
+        <div class="col-lg-4 col-md-6">
+            <div class="card product-card">
+                {% if product['image_url'] %}
+                    <img src="{{ product['image_url'] }}"
+                         class="product-image"
+                         alt="{{ product['name'] }}">
+                {% else %}
+                    <div class="placeholder-image">🐾</div>
+                {% endif %}
+
+                <div class="card-body">
+                    <span class="badge text-bg-secondary">
+                        {{ product['pet_type'] }}
+                    </span>
+
+                    <h5 class="mt-2">{{ product['name'] }}</h5>
+                    <p class="text-muted mb-2">
+                        {{ product['category'] }}
+                    </p>
+
+                    <p>{{ product['description'] }}</p>
+
+                    <h5 class="text-success">
+                        ₱{{ "%.2f"|format(product['price']) }}
+                    </h5>
+
+                    <p class="small">
+                        {% if product['stock'] > 0 %}
+                            Stock: {{ product['stock'] }}
+                        {% else %}
+                            <span class="text-danger">Out of stock</span>
+                        {% endif %}
+                    </p>
+
+                    <a href="{{ url_for('product_detail',
+                                        product_id=product['id']) }}"
+                       class="btn btn-paw w-100">
+                        View Details
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="col-12 text-center py-5">
+            <h4>No products found.</h4>
+            <p>Try changing your filters.</p>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

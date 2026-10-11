@@ -1,731 +1,872 @@
+
 import os
 import sqlite3
+from pathlib import Path
+from datetime import datetime
+from io import BytesIO
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from io import BytesIO
-from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, request, render_template, redirect, url_for, session, send_file, abort
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent
-DATABASE = BASE_DIR / "karinderya.db"
-
-app = Flask(__name__)
-
-app.secret_key = os.environ.get(
-    "SECRET_KEY",
-    "local-development-only-change-this"
+from flask import (
+    Flask, request, render_template, redirect,
+    url_for, session, send_file, abort, flash
 )
 
-if os.environ.get("RAILWAY_ENVIRONMENT") and not os.environ.get("SECRET_KEY"):
-    raise RuntimeError(
-        "SECRET_KEY must be configured in Railway Variables."
-    )
-# =========================================================
-# RAILWAY DEPLOYMENT CHECK
-# =========================================================
-@app.route("/railway-check", methods=["GET"])
-def railway_check():
-    return {
-        "status": "success",
-        "message": "RAILWAY IS RUNNING THE CURRENT APP.PY",
-        "version": "2.0"
-    }, 200
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE = BASE_DIR / "pet_store.db"
 
-# =========================================================
-# TEST ROUTE
-# =========================================================
-@app.route("/test", methods=["GET"])
-def test():
-    return {"status": "success", "message": "Test route is working"}, 200
+app = Flask(__name__)
+app.secret_key = os.environ.get(
+    "SECRET_KEY", "local-development-only-change-this"
+)
 
-# =========================================================
-# HEALTH CHECK
-# =========================================================
-@app.route("/health", methods=["GET"])
-def health():
-    return {"status": "ok"}, 200
 
-# =========================================================
+# =====================================================
 # DATABASE CONNECTION
-# =========================================================
+# =====================================================
+
 def get_db():
     database_url = os.environ.get("DATABASE_URL")
 
     if not database_url:
         if os.environ.get("RAILWAY_ENVIRONMENT"):
             raise RuntimeError(
-                "DATABASE_URL is missing in the Railway environment."
+                "DATABASE_URL is missing in Railway Variables."
             )
 
-        # Local development only
         conn = sqlite3.connect(str(DATABASE))
         conn.row_factory = sqlite3.Row
         return conn
 
-    # Railway PostgreSQL connection
-    conn = psycopg2.connect(
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace(
+            "postgres://", "postgresql://", 1
+        )
+
+    return psycopg2.connect(
         database_url,
         connect_timeout=10,
         sslmode="require"
     )
-    return conn
-
-# =========================================================
-# DATABASE CHECK
-# =========================================================
-@app.route("/db-check", methods=["GET"])
-def db_check():
-    conn = None
-
-    try:
-        conn = get_db()
-
-        if isinstance(conn, sqlite3.Connection):
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            result = cursor.fetchone()[0]
-            database_type = "sqlite"
-        else:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT current_database(), 1"
-                )
-                row = cursor.fetchone()
-
-            database_type = "postgresql"
-            result = row[1]
-
-        return {
-            "status": "success",
-            "database": database_type,
-            "connected": True,
-            "test_query": result
-        }, 200
-
-    except Exception:
-        app.logger.exception("Database connection test failed")
-
-        return {
-            "status": "error",
-            "connected": False,
-            "message": "Database connection failed. Check Railway logs."
-        }, 500
-
-    finally:
-        if conn is not None:
-            conn.close()
-# Helper function to get columns for SQLite compatibility
-def _table_columns(db_conn, table_name):
-    if isinstance(db_conn, sqlite3.Connection):
-        cursor = db_conn.cursor()
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        columns = [row[1] for row in cursor.fetchall()]
-        return set(columns)
-    else:
-        cursor = db_conn.cursor()
-        cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}'")
-        columns = [row[0] for row in cursor.fetchall()]
-        return set(columns)
 
 
-# =========================================================
-# INITIALIZE DATABASE & ADMIN ACCOUNT
-# =========================================================
+def is_sqlite(conn):
+    return isinstance(conn, sqlite3.Connection)
+
+
+def placeholder(conn):
+    return "?" if is_sqlite(conn) else "%s"
+
+
+def cursor_for(conn):
+    if is_sqlite(conn):
+        return conn.cursor()
+    return conn.cursor(cursor_factory=RealDictCursor)
+
+
+# =====================================================
+# DATABASE INITIALIZATION
+# =====================================================
+
 def init_db():
     conn = get_db()
+    p = placeholder(conn)
+
     try:
-        # 1. CREATE TABLES
-        if isinstance(conn, sqlite3.Connection):
-             cursor = conn.cursor()
-             cursor.execute("""
-                 CREATE TABLE IF NOT EXISTS users (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     username TEXT UNIQUE NOT NULL,
-                     password TEXT NOT NULL,
-                     created_at TEXT NOT NULL
-                 )
-             """)
-             cursor.execute("""
-                 CREATE TABLE IF NOT EXISTS orders (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     username TEXT NOT NULL,
-                     restaurant_id INTEGER NOT NULL,
-                     restaurant_name TEXT NOT NULL,
-                     food TEXT NOT NULL,
-                     price REAL NOT NULL,
-                     payment_method TEXT NOT NULL,
-                     payment_status TEXT NOT NULL,
-                     order_status TEXT NOT NULL,
-                     created_at TEXT NOT NULL
-                 )
-             """)
-             cursor.execute("""
-                 CREATE TABLE IF NOT EXISTS menu_items (
+        cur = conn.cursor()
+
+        if is_sqlite(conn):
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'customer',
+                    created_at TEXT NOT NULL
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS products (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    pet_type TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
                     price REAL NOT NULL,
-                    available INTEGER DEFAULT 1
-                 )
-             """)
-             conn.commit()
+                    stock INTEGER NOT NULL DEFAULT 0,
+                    image_url TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS pet_orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL,
+                    product_id INTEGER NOT NULL,
+                    product_name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    unit_price REAL NOT NULL,
+                    total_price REAL NOT NULL,
+                    payment_method TEXT NOT NULL,
+                    payment_status TEXT NOT NULL,
+                    order_status TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+
+            cur.execute("PRAGMA table_info(users)")
+            columns = {row[1] for row in cur.fetchall()}
+
+            if "role" not in columns:
+                cur.execute("""
+                    ALTER TABLE users
+                    ADD COLUMN role TEXT NOT NULL DEFAULT 'customer'
+                """)
 
         else:
-             with conn.cursor() as cursor:
-                 cursor.execute("""
-                     CREATE TABLE IF NOT EXISTS users (
-                         id SERIAL PRIMARY KEY,
-                         username TEXT UNIQUE NOT NULL,
-                         password TEXT NOT NULL,
-                         created_at TEXT NOT NULL
-                     )
-                 """)
-                 cursor.execute("""
-                     CREATE TABLE IF NOT EXISTS orders (
-                         id SERIAL PRIMARY KEY,
-                         username TEXT NOT NULL,
-                         restaurant_id INTEGER NOT NULL,
-                         restaurant_name TEXT NOT NULL,
-                         food TEXT NOT NULL,
-                         price REAL NOT NULL,
-                         payment_method TEXT NOT NULL,
-                         payment_status TEXT NOT NULL,
-                         order_status TEXT NOT NULL,
-                         created_at TEXT NOT NULL
-                     )
-                 """)
-                 cursor.execute("""
-                     CREATE TABLE IF NOT EXISTS menu_items (
-                        id SERIAL PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        price REAL NOT NULL,
-                        available INTEGER DEFAULT 1
-                     )
-                 """)
-                 conn.commit()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'customer',
+                    created_at TEXT NOT NULL
+                )
+            """)
 
-        # 2. SEED ADMIN ACCOUNT
-        admin_username = "admin"
-        admin_password = generate_password_hash("admin123")
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS products (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    pet_type TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    price NUMERIC(10,2) NOT NULL,
+                    stock INTEGER NOT NULL DEFAULT 0,
+                    image_url TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )
+            """)
 
-        if isinstance(conn, sqlite3.Connection):
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE username = ?", (admin_username,))
-            if not cursor.fetchone():
-                cursor.execute("""
-                    INSERT INTO users (username, password, created_at)
-                    VALUES (?, ?, ?)
-                """, (admin_username, admin_password, created_at))
-                conn.commit()
-        else:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM users WHERE username = %s", (admin_username,))
-                if not cursor.fetchone():
-                    cursor.execute("""
-                        INSERT INTO users (username, password, created_at)
-                        VALUES (%s, %s, %s)
-                    """, (admin_username, admin_password, created_at))
-                    conn.commit()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS pet_orders (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    product_id INTEGER NOT NULL,
+                    product_name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    unit_price NUMERIC(10,2) NOT NULL,
+                    total_price NUMERIC(10,2) NOT NULL,
+                    payment_method TEXT NOT NULL,
+                    payment_status TEXT NOT NULL,
+                    order_status TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+
+            cur.execute("""
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS role
+                TEXT NOT NULL DEFAULT 'customer'
+            """)
+
+        # Create the administrator account if it does not exist.
+        cur.execute(
+            f"SELECT id FROM users WHERE username = {p}",
+            ("admin",)
+        )
+
+        if not cur.fetchone():
+            admin_password = os.environ.get(
+                "ADMIN_PASSWORD", "admin123"
+            )
+
+            cur.execute(
+                f"""INSERT INTO users
+                (username, password, role, created_at)
+                VALUES ({p}, {p}, {p}, {p})""",
+                (
+                    "admin",
+                    generate_password_hash(admin_password),
+                    "admin",
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+            )
+
+        # Sample products are added only to an empty catalog.
+        cur.execute("SELECT COUNT(*) FROM products")
+        product_count = cur.fetchone()[0]
+
+        if product_count == 0:
+            samples = [
+                (
+                    "Puppy Chicken Dry Food 1kg",
+                    "Dry Food", "Dog",
+                    "Complete dry food for growing puppies.",
+                    249.00, 20, ""
+                ),
+                (
+                    "Adult Dog Beef Kibble 1kg",
+                    "Dry Food", "Dog",
+                    "Everyday food for adult dogs.",
+                    219.00, 25, ""
+                ),
+                (
+                    "Kitten Dry Food 1kg",
+                    "Dry Food", "Cat",
+                    "Dry food for kittens.",
+                    269.00, 18, ""
+                ),
+                (
+                    "Adult Cat Food 1kg",
+                    "Dry Food", "Cat",
+                    "Daily food for adult cats.",
+                    239.00, 22, ""
+                ),
+                (
+                    "Chicken Flavor Pet Treats",
+                    "Treats", "Dog",
+                    "Reward treats for dogs.",
+                    89.00, 30, ""
+                ),
+                (
+                    "Catnip Toy",
+                    "Pet Supplies", "Cat",
+                    "A toy for cat playtime.",
+                    99.00, 15, ""
+                )
+            ]
+
+            for item in samples:
+                cur.execute(
+                    f"""INSERT INTO products
+                    (name, category, pet_type, description,
+                     price, stock, image_url, created_at)
+                    VALUES ({', '.join([p] * 8)})""",
+                    item + (
+                        datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
+                    )
+                )
+
+        conn.commit()
 
     finally:
         conn.close()
 
 
-# =========================================================
-# KARINDERYAS
-# =========================================================
-restaurants = {
-    1: {"name": "Karinderya Ni Maria", "address": "Quezon City", "lat": 14.6760, "lng": 121.0437},
-    2: {"name": "Lutong Bahay Express", "address": "Quezon City", "lat": 14.6800, "lng": 121.0500},
-    3: {"name": "Nanay's Karinderya", "address": "Quezon City", "lat": 14.6700, "lng": 121.0400},
-    4: {"name": "Ate's Carinderia", "address": "Quezon City", "lat": 14.6900, "lng": 121.0550}
-}
+# =====================================================
+# HOME PAGE
+# =====================================================
 
-# =========================================================
-# MENUS
-# =========================================================
-menus = {
-    1: [
-        {"name": "Chicken Adobo", "price": 75},
-        {"name": "Pork Sinigang", "price": 85},
-        {"name": "Fried Bangus", "price": 90},
-        {"name": "Pancit Canton", "price": 65}
-    ],
-    2: [
-        {"name": "Beef Tapa", "price": 85},
-        {"name": "Chicken Inasal", "price": 90},
-        {"name": "Pork BBQ", "price": 75},
-        {"name": "Ginisang Gulay", "price": 55}
-    ],
-    3: [
-        {"name": "Pork Adobo", "price": 75},
-        {"name": "Tinolang Manok", "price": 80},
-        {"name": "Fried Tilapia", "price": 70},
-        {"name": "Lumpiang Shanghai", "price": 60}
-    ],
-    4: [
-        {"name": "Sisig", "price": 80},
-        {"name": "Chicken Curry", "price": 85},
-        {"name": "Pork Chop", "price": 90},
-        {"name": "Mongo with Chicharon", "price": 65}
-    ]
-}
-
-
-# =========================================================
-# HOME
-# =========================================================
 @app.route("/")
 def home():
     conn = get_db()
-    featured = []
+
     try:
-        if isinstance(conn, sqlite3.Connection):
-             conn.row_factory = sqlite3.Row
-             cursor = conn.cursor()
-             featured = cursor.execute("""
-                 SELECT * FROM menu_items WHERE available = 1 ORDER BY id DESC LIMIT 3
-             """).fetchall()
-        else:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("""
-                    SELECT * FROM menu_items WHERE available = 1 ORDER BY id DESC LIMIT 3
-                """)
-                featured = cursor.fetchall()
-    except Exception as e:
-        print(f"Error fetching featured items: {e}")
+        with cursor_for(conn) as cur:
+            cur.execute("""
+                SELECT * FROM products
+                WHERE stock > 0
+                ORDER BY id DESC LIMIT 6
+            """)
+            products = cur.fetchall()
+
+        return render_template("index.html", featured=products)
+
     finally:
         conn.close()
 
-    return render_template("index.html", featured=featured)
 
-
-# =========================================================
+# =====================================================
 # REGISTER
-# =========================================================
+# =====================================================
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
-
-        if not username or not password or not confirm_password:
-            return render_template("register.html", error="All fields are required.")
+        confirm = request.form.get("confirm_password", "")
 
         if len(username) < 3:
-            return render_template("register.html", error="Username must be at least 3 characters.")
+            flash("Username must be at least 3 characters.", "error")
+            return render_template("register.html")
 
         if len(password) < 6:
-            return render_template("register.html", error="Password must be at least 6 characters.")
+            flash("Password must be at least 6 characters.", "error")
+            return render_template("register.html")
 
-        if password != confirm_password:
-            return render_template("register.html", error="Passwords do not match.")
+        if password != confirm:
+            flash("Passwords do not match.", "error")
+            return render_template("register.html")
 
         conn = get_db()
+        p = placeholder(conn)
+
         try:
-            if isinstance(conn, sqlite3.Connection):
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-                existing_user = cursor.fetchone()
-            else:
-                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-                    existing_user = cursor.fetchone()
+            with cursor_for(conn) as cur:
+                cur.execute(
+                    f"SELECT id FROM users WHERE username = {p}",
+                    (username,)
+                )
 
-            if existing_user:
-                return render_template("register.html", error="Username already exists. Please choose another.")
+                if cur.fetchone():
+                    flash("Username already exists.", "error")
+                    return render_template("register.html")
 
-            hashed_password = generate_password_hash(password)
-            created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cur.execute(
+                    f"""INSERT INTO users
+                    (username, password, role, created_at)
+                    VALUES ({', '.join([p] * 4)})""",
+                    (
+                        username,
+                        generate_password_hash(password),
+                        "customer",
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    )
+                )
 
-            if isinstance(conn, sqlite3.Connection):
-                cursor.execute("""
-                    INSERT INTO users (username, password, created_at)
-                    VALUES (?, ?, ?)
-                """, (username, hashed_password, created_at))
-            else:
-                 with conn.cursor() as cursor:
-                     cursor.execute("""
-                         INSERT INTO users (username, password, created_at)
-                         VALUES (%s, %s, %s)
-                     """, (username, hashed_password, created_at))
-            
             conn.commit()
-            
+
+            session.clear()
             session["username"] = username
-            return redirect(url_for("nearby"))
+            session["role"] = "customer"
+
+            flash("Account created successfully!", "success")
+            return redirect(url_for("shop"))
 
         finally:
             conn.close()
 
     return render_template("register.html")
 
-# =========================================================
+
+# =====================================================
 # LOGIN
-# =========================================================
+# =====================================================
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
-     if request.method == "POST":
-         username = request.form.get("username", "").strip()
-         password = request.form.get("password", "")
-
-         if not username or not password:
-             return render_template("login.html", error="Please enter your username and password.")
-
-         conn = get_db()
-         user = None
-         try:
-            if isinstance(conn, sqlite3.Connection):
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-                user = cursor.fetchone()
-            else:
-                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                     cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-                     user = cursor.fetchone()
-         finally:
-             conn.close()
-
-         if user and check_password_hash(user["password"], password):
-             session["username"] = user["username"]
-             
-             # Redirect admin to dashboard, normal users to nearby
-             if user["username"] == "admin":
-                 return redirect(url_for("admin_dashboard"))
-             return redirect(url_for("nearby"))
-
-         return render_template("login.html", error="Invalid username or password.")
-
-     return render_template("login.html")
-
-
-# =========================================================
-# ADMIN DASHBOARD
-# =========================================================
-@app.route("/admin")
-def admin_dashboard():
-    if "username" not in session:
-        return redirect(url_for("login"))
-    
-    if session["username"] != "admin":
-        return "Access Denied: Administrator privileges required.", 403
-    
-    conn = get_db()
-    all_orders = []
-    all_users = []
-    try:
-        if isinstance(conn, sqlite3.Connection):
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            all_orders = cursor.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
-            all_users = cursor.execute("SELECT id, username, created_at FROM users").fetchall()
-        else:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("SELECT * FROM orders ORDER BY id DESC")
-                all_orders = cursor.fetchall()
-                cursor.execute("SELECT id, username, created_at FROM users")
-                all_users = cursor.fetchall()
-    finally:
-        conn.close()
-
-    # Note: You will need to create 'admin.html' in your templates folder to render this properly.
-    return render_template("admin.html", orders=all_orders, users=all_users)
-
-
-# =========================================================
-# NEARBY KARINDERYAS
-# =========================================================
-@app.route("/nearby")
-def nearby():
-    if "username" not in session:
-        return redirect(url_for("login"))
-    return render_template("nearby.html", restaurants=restaurants)
-
-
-# =========================================================
-# RESTAURANT / KARINDERYA MENU
-# =========================================================
-@app.route("/restaurant/<int:restaurant_id>")
-def restaurant(restaurant_id):
-    if "username" not in session:
-        return redirect(url_for("login"))
-
-    restaurant_data = restaurants.get(restaurant_id)
-
-    if restaurant_data is None:
-        return "Karinderya not found.", 404
-
-    restaurant_menu = menus.get(restaurant_id, [])
-
-    return render_template(
-        "restaurant.html",
-        restaurant=restaurant_data,
-        restaurant_id=restaurant_id,
-        menu=restaurant_menu
-    )
-
-# =========================================================
-# ORDER
-# =========================================================
-@app.route("/order", methods=["GET", "POST"])
-def order():
-    if "username" not in session:
-        return redirect(url_for("login"))
-
     if request.method == "POST":
-        restaurant_id = request.form.get("restaurant_id")
-        food = request.form.get("food")
-        price = request.form.get("price")
-        payment_method = request.form.get("payment_method")
-
-        if not all([restaurant_id, food, price, payment_method]):
-            return "Missing required fields.", 400
-
-        try:
-            restaurant_id = int(restaurant_id)
-        except ValueError:
-            return "Invalid restaurant.", 400
-
-        restaurant_data = restaurants.get(restaurant_id)
-        if restaurant_data is None:
-            return "Karinderya not found.", 404
-
-        try:
-            price = float(price)
-        except ValueError:
-            return "Invalid price.", 400
-
-        username = session["username"]
-
-        if payment_method == "Cash on Pickup":
-            payment_status = "Pay on Pickup"
-        else:
-            payment_status = "Pending"
-
-        order_status = "Waiting"
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
 
         conn = get_db()
+        p = placeholder(conn)
+
         try:
-             if isinstance(conn, sqlite3.Connection):
-                  cursor = conn.cursor()
-                  cursor.execute("""
-                      INSERT INTO orders (
-                          username, restaurant_id, restaurant_name,
-                          food, price, payment_method,
-                          payment_status, order_status, created_at
-                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  """, (username, restaurant_id, restaurant_data["name"], food, price, payment_method, payment_status, order_status, created_at))
-                  order_id = cursor.lastrowid
-             else:
-                  with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                      cursor.execute("""
-                          INSERT INTO orders (
-                              username, restaurant_id, restaurant_name,
-                              food, price, payment_method,
-                              payment_status, order_status, created_at
-                          ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                          RETURNING id
-                      """, (username, restaurant_id, restaurant_data["name"], food, price, payment_method, payment_status, order_status, created_at))
-                      result = cursor.fetchone()
-                      order_id = result["id"]
-             conn.commit()
+            with cursor_for(conn) as cur:
+                cur.execute(
+                    f"SELECT * FROM users WHERE username = {p}",
+                    (username,)
+                )
+                user = cur.fetchone()
         finally:
             conn.close()
 
-        return redirect(url_for("queue", order_id=order_id))
+        if user and check_password_hash(user["password"], password):
+            session.clear()
+            session["username"] = user["username"]
+            session["role"] = user["role"]
 
-    restaurant_id = request.args.get("restaurant_id")
-    food = request.args.get("food")
-    price = request.args.get("price")
+            if user["role"] == "admin":
+                return redirect(url_for("admin_dashboard"))
 
-    if not restaurant_id:
-        return "Restaurant is required.", 400
+            return redirect(url_for("shop"))
 
-    try:
-        restaurant_id = int(restaurant_id)
-    except ValueError:
-        return "Invalid restaurant.", 400
+        flash("Invalid username or password.", "error")
 
-    restaurant_data = restaurants.get(restaurant_id)
-    if restaurant_data is None:
-        return "Karinderya not found.", 404
-
-    return render_template(
-        "order.html",
-        restaurant=restaurant_data,
-        restaurant_id=restaurant_id,
-        food=food,
-        price=price
-    )
+    return render_template("login.html")
 
 
-# =========================================================
-# ORDER QUEUE
-# =========================================================
-@app.route("/queue/<int:order_id>")
-def queue(order_id):
-    if "username" not in session:
+# =====================================================
+# ADMIN ACCESS CONTROL
+# =====================================================
+
+def require_admin():
+    if not session.get("username"):
         return redirect(url_for("login"))
 
-    conn = get_db()
-    customer_orders = []
-    try:
-         if isinstance(conn, sqlite3.Connection):
-             conn.row_factory = sqlite3.Row
-             cursor = conn.cursor()
-             order_columns = _table_columns(conn, "orders")
+    if session.get("role") != "admin":
+        abort(403)
 
-             if {"user_id", "item_id"}.issubset(order_columns) and "user_id" in session:
-                  customer_orders = cursor.execute("""
-                      SELECT o.*, m.name AS item_name
-                      FROM orders o
-                      LEFT JOIN menu_items m ON m.id = o.item_id
-                      WHERE o.user_id = ?
-                      ORDER BY o.id DESC
-                  """, (session.get("user_id"),)).fetchall()
-             elif "username" in order_columns:
-                  customer_orders = cursor.execute(
-                      "SELECT * FROM orders WHERE username = ? ORDER BY id DESC",
-                      (session["username"],)
-                  ).fetchall()
-             
-         else:
-             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                 order_columns = _table_columns(conn, "orders")
-                 
-                 if "user_id" in order_columns and "item_id" in order_columns and "user_id" in session:
-                     cursor.execute("""
-                         SELECT o.*, m.name AS item_name
-                         FROM orders o
-                         LEFT JOIN menu_items m ON m.id = o.item_id
-                         WHERE o.user_id = %s
-                         ORDER BY o.id DESC
-                     """, (session.get("user_id"),))
-                     customer_orders = cursor.fetchall()
-                 elif "username" in order_columns:
-                      cursor.execute(
-                          "SELECT * FROM orders WHERE username = %s ORDER BY id DESC",
-                          (session["username"],)
-                      )
-                      customer_orders = cursor.fetchall()
-    except Exception as e:
-        app.logger.exception(f"Database error while loading orders: {e}")
-        abort(500)
+    return None
+
+
+# =====================================================
+# PET FOOD SHOP
+# =====================================================
+
+@app.route("/shop")
+def shop():
+    conn = get_db()
+    p = placeholder(conn)
+
+    category = request.args.get("category", "").strip()
+    pet_type = request.args.get("pet_type", "").strip()
+
+    try:
+        query = "SELECT * FROM products WHERE 1=1"
+        params = []
+
+        if category:
+            query += f" AND category = {p}"
+            params.append(category)
+
+        if pet_type:
+            query += f" AND pet_type = {p}"
+            params.append(pet_type)
+
+        query += " ORDER BY name"
+
+        with cursor_for(conn) as cur:
+            cur.execute(query, tuple(params))
+            products = cur.fetchall()
+
+        return render_template(
+            "shop.html",
+            products=products,
+            category=category,
+            pet_type=pet_type
+        )
+
     finally:
         conn.close()
 
-    return render_template("orders.html", orders=customer_orders)
+
+# =====================================================
+# PRODUCT DETAILS
+# =====================================================
+
+@app.route("/product/<int:product_id>")
+def product_detail(product_id):
+    conn = get_db()
+    p = placeholder(conn)
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute(
+                f"SELECT * FROM products WHERE id = {p}",
+                (product_id,)
+            )
+            product = cur.fetchone()
+
+        if not product:
+            abort(404)
+
+        return render_template("product.html", product=product)
+
+    finally:
+        conn.close()
 
 
-# =========================================================
-# MENU
-# =========================================================
-@app.route("/menu")
-def menu():
-    if "username" not in session:
+# =====================================================
+# PLACE ORDER
+# =====================================================
+
+@app.route("/order/<int:product_id>", methods=["POST"])
+def place_order(product_id):
+    if not session.get("username"):
         return redirect(url_for("login"))
-    return redirect(url_for("nearby"))
 
+    try:
+        quantity = int(request.form.get("quantity", "1"))
+    except ValueError:
+        flash("Enter a valid quantity.", "error")
+        return redirect(url_for(
+            "product_detail", product_id=product_id
+        ))
 
-# =========================================================
-# LOGOUT
-# =========================================================
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("home"))
+    payment_method = request.form.get("payment_method", "")
 
+    if quantity < 1 or quantity > 100:
+        flash("Quantity must be between 1 and 100.", "error")
+        return redirect(url_for(
+            "product_detail", product_id=product_id
+        ))
 
-# =========================================================
-# EXPORT EXCEL
-# =========================================================
-@app.route("/export-excel")
-def export_excel():
-    if "username" not in session:
-        return redirect(url_for("login"))
-        
-    if session["username"] != "admin":
-         return "Access Denied: Only administrators can export data.", 403
+    if payment_method not in ("Cash on Delivery", "GCash"):
+        flash("Choose a valid payment method.", "error")
+        return redirect(url_for(
+            "product_detail", product_id=product_id
+        ))
 
     conn = get_db()
-    users = []
-    orders_data = []
-    
-    try:
-        if isinstance(conn, sqlite3.Connection):
-             conn.row_factory = sqlite3.Row
-             cursor = conn.cursor()
-             users = cursor.execute("SELECT id, username, created_at FROM users ORDER BY id").fetchall()
-             orders_data = cursor.execute("""
-                 SELECT id, username, restaurant_id, restaurant_name,
-                        food, price, payment_method, payment_status,
-                        order_status, created_at
-                 FROM orders ORDER BY id DESC
-             """).fetchall()
-        else:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("SELECT id, username, created_at FROM users ORDER BY id")
-                users = cursor.fetchall()
+    p = placeholder(conn)
 
-                cursor.execute("""
-                    SELECT id, username, restaurant_id, restaurant_name,
-                           food, price, payment_method, payment_status,
-                           order_status, created_at
-                    FROM orders ORDER BY id DESC
-                """)
-                orders_data = cursor.fetchall()
+    try:
+        # Lock a PostgreSQL product row to prevent overselling.
+        with cursor_for(conn) as cur:
+            sql = f"SELECT * FROM products WHERE id = {p}"
+            if not is_sqlite(conn):
+                sql += " FOR UPDATE"
+
+            cur.execute(sql, (product_id,))
+            product = cur.fetchone()
+
+            if not product:
+                abort(404)
+
+            if product["stock"] < quantity:
+                flash("Not enough stock available.", "error")
+                return redirect(url_for(
+                    "product_detail", product_id=product_id
+                ))
+
+            price = float(product["price"])
+            total = round(price * quantity, 2)
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            cur.execute(
+                f"""INSERT INTO pet_orders
+                (username, product_id, product_name, quantity,
+                 unit_price, total_price, payment_method,
+                 payment_status, order_status, created_at)
+                VALUES ({', '.join([p] * 10)})""",
+                (
+                    session["username"],
+                    product_id,
+                    product["name"],
+                    quantity,
+                    price,
+                    total,
+                    payment_method,
+                    "Pending",
+                    "Processing",
+                    now
+                )
+            )
+
+            cur.execute(
+                f"""UPDATE products SET stock = stock - {p}
+                WHERE id = {p}""",
+                (quantity, product_id)
+            )
+
+        conn.commit()
+        flash("Your order has been placed!", "success")
+        return redirect(url_for("my_orders"))
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+# =====================================================
+# CUSTOMER ORDER HISTORY
+# =====================================================
+
+@app.route("/my-orders")
+def my_orders():
+    if not session.get("username"):
+        return redirect(url_for("login"))
+
+    conn = get_db()
+    p = placeholder(conn)
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute(
+                f"""SELECT * FROM pet_orders
+                WHERE username = {p}
+                ORDER BY id DESC""",
+                (session["username"],)
+            )
+            orders = cur.fetchall()
+
+        return render_template("orders.html", orders=orders)
+
+    finally:
+        conn.close()
+
+
+# =====================================================
+# ADMIN DASHBOARD
+# =====================================================
+
+@app.route("/admin")
+def admin_dashboard():
+    denied = require_admin()
+    if denied:
+        return denied
+
+    conn = get_db()
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute("SELECT * FROM products ORDER BY id DESC")
+            products = cur.fetchall()
+
+            cur.execute("SELECT * FROM pet_orders ORDER BY id DESC")
+            orders = cur.fetchall()
+
+            cur.execute("""
+                SELECT id, username, role, created_at
+                FROM users ORDER BY id DESC
+            """)
+            users = cur.fetchall()
+
+        return render_template(
+            "admin.html",
+            products=products,
+            orders=orders,
+            users=users
+        )
+
+    finally:
+        conn.close()
+
+
+# =====================================================
+# ADD PRODUCT (CREATE)
+# =====================================================
+
+@app.route("/admin/products/add", methods=["POST"])
+def add_product():
+    denied = require_admin()
+    if denied:
+        return denied
+
+    name = request.form.get("name", "").strip()
+    category = request.form.get("category", "").strip()
+    pet_type = request.form.get("pet_type", "").strip()
+    description = request.form.get("description", "").strip()
+    image_url = request.form.get("image_url", "").strip()
+
+    try:
+        price = float(request.form.get("price", "0"))
+        stock = int(request.form.get("stock", "0"))
+    except ValueError:
+        flash("Price or stock is invalid.", "error")
+        return redirect(url_for("admin_dashboard"))
+
+    if (
+        not name
+        or category not in (
+            "Dry Food", "Wet Food", "Treats", "Pet Supplies"
+        )
+        or pet_type not in ("Dog", "Cat", "Both")
+        or price <= 0
+        or stock < 0
+    ):
+        flash("Please check the product details.", "error")
+        return redirect(url_for("admin_dashboard"))
+
+    conn = get_db()
+    p = placeholder(conn)
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute(
+                f"""INSERT INTO products
+                (name, category, pet_type, description,
+                 price, stock, image_url, created_at)
+                VALUES ({', '.join([p] * 8)})""",
+                (
+                    name, category, pet_type, description,
+                    price, stock, image_url,
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
+            )
+
+        conn.commit()
+        flash("Product added successfully!", "success")
+
+    finally:
+        conn.close()
+
+    return redirect(url_for("admin_dashboard"))
+
+
+# =====================================================
+# EDIT PRODUCT (UPDATE)
+# =====================================================
+
+@app.route("/admin/products/<int:product_id>/edit", methods=["POST"])
+def edit_product(product_id):
+    denied = require_admin()
+    if denied:
+        return denied
+
+    name = request.form.get("name", "").strip()
+    category = request.form.get("category", "").strip()
+    pet_type = request.form.get("pet_type", "").strip()
+    description = request.form.get("description", "").strip()
+    image_url = request.form.get("image_url", "").strip()
+
+    try:
+        price = float(request.form.get("price", "0"))
+        stock = int(request.form.get("stock", "0"))
+    except ValueError:
+        flash("Invalid price or stock.", "error")
+        return redirect(url_for("admin_dashboard"))
+
+    if (
+        not name
+        or category not in (
+            "Dry Food", "Wet Food", "Treats", "Pet Supplies"
+        )
+        or pet_type not in ("Dog", "Cat", "Both")
+        or price <= 0
+        or stock < 0
+    ):
+        flash("Please check the product details.", "error")
+        return redirect(url_for("admin_dashboard"))
+
+    conn = get_db()
+    p = placeholder(conn)
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute(
+                f"""UPDATE products
+                SET name={p}, category={p}, pet_type={p},
+                    description={p}, price={p}, stock={p},
+                    image_url={p}
+                WHERE id={p}""",
+                (
+                    name, category, pet_type, description,
+                    price, stock, image_url, product_id
+                )
+            )
+
+        conn.commit()
+        flash("Product updated successfully!", "success")
+
+    finally:
+        conn.close()
+
+    return redirect(url_for("admin_dashboard"))
+
+
+# =====================================================
+# DELETE PRODUCT (DELETE)
+# =====================================================
+
+@app.route(
+    "/admin/products/<int:product_id>/delete",
+    methods=["POST"]
+)
+def delete_product(product_id):
+    denied = require_admin()
+    if denied:
+        return denied
+
+    conn = get_db()
+    p = placeholder(conn)
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute(
+                f"DELETE FROM products WHERE id = {p}",
+                (product_id,)
+            )
+
+        conn.commit()
+        flash("Product deleted.", "success")
+
+    finally:
+        conn.close()
+
+    return redirect(url_for("admin_dashboard"))
+
+
+# =====================================================
+# EXPORT DATABASE TO EXCEL
+# =====================================================
+
+@app.route("/export-excel")
+def export_excel():
+    denied = require_admin()
+    if denied:
+        return denied
+
+    conn = get_db()
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute("""
+                SELECT id, username, role, created_at
+                FROM users ORDER BY id
+            """)
+            users = cur.fetchall()
+
+            cur.execute("SELECT * FROM products ORDER BY id")
+            products = cur.fetchall()
+
+            cur.execute("SELECT * FROM pet_orders ORDER BY id DESC")
+            orders = cur.fetchall()
 
     finally:
         conn.close()
 
     workbook = Workbook()
 
-    # Users Sheet
-    users_sheet = workbook.active
-    users_sheet.title = "Users"
-    users_sheet.append(["ID", "Username", "Created At"])
+    datasets = [
+        (
+            "Users",
+            ["ID", "Username", "Role", "Created At"],
+            users,
+            ["id", "username", "role", "created_at"]
+        ),
+        (
+            "Products",
+            ["ID", "Name", "Category", "Pet Type",
+             "Description", "Price", "Stock", "Image URL",
+             "Created At"],
+            products,
+            ["id", "name", "category", "pet_type",
+             "description", "price", "stock", "image_url",
+             "created_at"]
+        ),
+        (
+            "Orders",
+            ["ID", "Username", "Product", "Quantity",
+             "Unit Price", "Total", "Payment Method",
+             "Payment Status", "Order Status", "Created At"],
+            orders,
+            ["id", "username", "product_name", "quantity",
+             "unit_price", "total_price", "payment_method",
+             "payment_status", "order_status", "created_at"]
+        )
+    ]
 
-    for user in users:
-        users_sheet.append([user["id"], user["username"], user["created_at"]])
+    for index, (title, headers, rows, keys) in enumerate(datasets):
+        sheet = (
+            workbook.active
+            if index == 0
+            else workbook.create_sheet()
+        )
+        sheet.title = title
+        sheet.append(headers)
 
-    # Orders Sheet
-    orders_sheet = workbook.create_sheet("Orders")
-    orders_sheet.append([
-        "ID", "Username", "Restaurant ID", "Restaurant Name",
-        "Food", "Price", "Payment Method", "Payment Status",
-        "Order Status", "Created At"
-    ])
+        for row in rows:
+            sheet.append([row[key] for key in keys])
 
-    for order_data in orders_data:
-        orders_sheet.append([
-            order_data["id"], order_data["username"],
-            order_data["restaurant_id"], order_data["restaurant_name"],
-            order_data["food"], order_data["price"],
-            order_data["payment_method"], order_data["payment_status"],
-            order_data["order_status"], order_data["created_at"]
-        ])
-
-    # Format
-    for sheet in workbook.worksheets:
         for cell in sheet[1]:
             cell.font = Font(bold=True)
+
         sheet.freeze_panes = "A2"
-        
+
         for column in sheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                if cell.value is not None:
-                    max_length = max(max_length, len(str(cell.value)))
-            sheet.column_dimensions[column_letter].width = min(max_length + 2, 40)
+            max_length = max(
+                (len(str(cell.value)) for cell in column
+                 if cell.value is not None),
+                default=8
+            )
+            sheet.column_dimensions[
+                column[0].column_letter
+            ].width = min(max_length + 2, 40)
 
     output = BytesIO()
     workbook.save(output)
@@ -734,24 +875,77 @@ def export_excel():
     return send_file(
         output,
         as_attachment=True,
-        download_name="karinderya_database.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        download_name="pet_store_database.xlsx",
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
     )
 
-# =========================================================
-# DATABASE INITIALIZATION
-# =========================================================
-try:
-    init_db()
-    app.logger.info("Database initialization completed.")
-except Exception:
-    app.logger.exception("Database initialization failed.")
 
-# =========================================================
-# START APPLICATION
-# =========================================================
+# =====================================================
+# LOGOUT AND HEALTH CHECK
+# =====================================================
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("home"))
+
+
+@app.route("/health")
+def health():
+    return {"status": "ok"}, 200
+
+
+@app.route("/db-check")
+def db_check():
+    conn = None
+
+    try:
+        conn = get_db()
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            result = cur.fetchone()[0]
+
+        return {
+            "status": "success",
+            "connected": True,
+            "database": (
+                "sqlite" if is_sqlite(conn) else "postgresql"
+            ),
+            "test_query": result
+        }, 200
+
+    except Exception:
+        app.logger.exception("Database check failed")
+        return {
+            "status": "error",
+            "connected": False,
+            "message": "Check your database configuration and logs."
+        }, 500
+
+    finally:
+        if conn:
+            conn.close()
+
+# =====================================================
+# NEARBY PET STORES
+# =====================================================
+
+@app.route("/nearby")
+def nearby():
+    return render_template("nearby.html")
+
+# =====================================================
+# STARTUP
+# =====================================================
+
+init_db()
+
 if __name__ == "__main__":
     app.run(
         debug=os.environ.get("FLASK_DEBUG") == "1",
         port=int(os.environ.get("PORT", 5000))
-    )   
+    )

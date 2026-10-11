@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product['name'] }} | PawMart{% endblock %}
+
+{% block content %}
+<div class="row g-4 align-items-start">
+    <div class="col-md-6">
+        {% if product['image_url'] %}
+            <img src="{{ product['image_url'] }}"
+                 class="img-fluid rounded-4 shadow-sm w-100"
+                 style="max-height: 450px; object-fit: contain;
+                        background: #f0e5d8;"
+                 alt="{{ product['name'] }}">
+        {% else %}
+            <div class="placeholder-image rounded-4"
+                 style="height: 350px; font-size: 100px;">
+                🐶 🐱
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-6">
+        <span class="badge text-bg-secondary">
+            {{ product['category'] }}
+        </span>
+
+        <h1 class="page-title mt-3">{{ product['name'] }}</h1>
+
+        <p class="text-muted">
+            Suitable for: {{ product['pet_type'] }}
+        </p>
+
+        <h2 class="text-success mb-3">
+            ₱{{ "%.2f"|format(product['price']) }}
+        </h2>
+
+        <p>{{ product['description'] }}</p>
+
+        <p>
+            <strong>Available stock:</strong>
+            {{ product['stock'] }}
+        </p>
+
+        {% if product['stock'] > 0 %}
+            {% if session.get('username')
+                  and session.get('role') != 'admin' %}
+                <form method="POST"
+                      action="{{ url_for('place_order',
+                                         product_id=product['id']) }}"
+                      class="card border-0 shadow-sm p-3">
+
+                    <div class="mb-3">
+                        <label class="form-label">Quantity</label>
+                        <input type="number" name="quantity"
+                               class="form-control"
+                               min="1"
+                               max="{{ [product['stock'], 100]|min }}"
+                               value="1" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Payment Method</label>
+                        <select name="payment_method"
+                                class="form-select" required>
+                            <option value="Cash on Delivery">
+                                Cash on Delivery
+                            </option>
+                            <option value="GCash">GCash</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-paw w-100">
+                        Place Order
+                    </button>
+                </form>
+
+            {% elif not session.get('username') %}
+                <a href="{{ url_for('login') }}"
+                   class="btn btn-paw w-100">
+                    Login to Order
+                </a>
+
+            {% else %}
+                <div class="alert alert-info">
+                    Administrators cannot place customer orders.
+                </div>
+            {% endif %}
+        {% else %}
+            <button class="btn btn-secondary w-100" disabled>
+                Out of Stock
+            </button>
+        {% endif %}
+
+        <a href="{{ url_for('shop') }}"
+           class="btn btn-outline-secondary mt-3">
+            Back to Shop
+        </a>
+    </div>
+</div>
+{% endblock %}
