@@ -957,7 +957,9 @@ def export_excel():
 @app.route("/logout")
 def logout():
     session.clear()
+    flash("You have logged out successfully!", "success")
     return redirect(url_for("home"))
+
 
 
 @app.route("/health")
