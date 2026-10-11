@@ -1,21 +1,93 @@
 {% extends "base.html" %}
-{% block title %}Nearby Karinderyas{% endblock %}
+
+{% block title %}Nearby Pet Stores | PawMart{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Nearby Karinderyas</h2>
-<div class="row g-4">
-    {% for id, details in restaurants.items() %}
-    <div class="col-md-6 col-lg-4">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body text-center">
-                <h5 class="card-title text-danger fw-bold">{{ details.name }}</h5>
-                <p class="card-text text-muted mb-4">
-                    📍 {{ details.address }}
-                </p>
-                <a href="{{ url_for('restaurant', restaurant_id=id) }}" class="btn btn-outline-danger w-100">View Menu</a>
-            </div>
-        </div>
+<div class="container py-4">
+    <h1 class="page-title">📍 Nearby Pet Stores</h1>
+
+    <p>
+        Find pet stores near your location to buy pet food,
+        treats, toys, and other pet supplies.
+    </p>
+
+    <div class="info-card">
+        <h4>Find Pet Stores Near You</h4>
+        <p>
+            Allow location access in your browser to help find
+            nearby pet stores.
+        </p>
+
+        <button class="btn btn-paw" onclick="findNearby()">
+            Use My Location
+        </button>
+
+        <p id="location-result" class="mt-3"></p>
     </div>
-    {% endfor %}
+
+    <div id="map" class="mt-4"></div>
 </div>
+{% endblock %}
+
+{% block head %}
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+function findNearby() {
+    const result = document.getElementById("location-result");
+
+    if (!navigator.geolocation) {
+        result.textContent = "Geolocation is not supported by your browser.";
+        return;
+    }
+
+    result.textContent = "Getting your location...";
+
+    navigator.geolocation.getCurrentPosition(
+        function(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+
+            result.textContent =
+                "Your location: " + lat.toFixed(5) +
+                ", " + lon.toFixed(5);
+
+            const mapElement = document.getElementById("map");
+
+            if (typeof L === "undefined") {
+                result.textContent += " Map library could not be loaded.";
+                return;
+            }
+
+            if (mapElement._leaflet_id) {
+                mapElement._leaflet_id = null;
+            }
+
+            const map = L.map("map").setView([lat, lon], 14);
+
+            L.tileLayer(
+                "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+                    attribution: "&copy; OpenStreetMap contributors"
+                }
+            ).addTo(map);
+
+            L.marker([lat, lon])
+                .addTo(map)
+                .bindPopup("Your location")
+                .openPopup();
+        },
+        function(error) {
+            result.textContent =
+                "Unable to get your location. Please allow location access.";
+        }
+    );
+}
+</script>
 {% endblock %}

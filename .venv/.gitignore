@@ -1,6 +1,4 @@
-# Python
-__pycache__/
-*.py[cod]
+# Virtual environments
 .venv/
 venv/
 
@@ -8,6 +6,11 @@ venv/
 *.db
 *.sqlite
 *.sqlite3
+instance/
 
-# Environment secrets
+# Secrets
 .env
+
+# Python cache
+__pycache__/
+*.py[cod]

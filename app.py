@@ -1,9 +1,9 @@
-
 import os
 import sqlite3
 from pathlib import Path
 from datetime import datetime
 from io import BytesIO
+from contextlib import contextmanager 
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -14,7 +14,6 @@ from flask import (
     Flask, request, render_template, redirect,
     url_for, session, send_file, abort, flash
 )
-
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = BASE_DIR / "pet_store.db"
 
@@ -60,13 +59,18 @@ def is_sqlite(conn):
 def placeholder(conn):
     return "?" if is_sqlite(conn) else "%s"
 
-
+@contextmanager
 def cursor_for(conn):
-    if is_sqlite(conn):
-        return conn.cursor()
-    return conn.cursor(cursor_factory=RealDictCursor)
-
-
+    cur = None
+    try:
+        if is_sqlite(conn):
+            cur = conn.cursor()
+        else:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+        yield cur
+    finally:
+        if cur is not None:
+            cur.close()
 # =====================================================
 # DATABASE INITIALIZATION
 # =====================================================
@@ -901,13 +905,13 @@ def health():
 @app.route("/db-check")
 def db_check():
     conn = None
+    cur = None
 
     try:
         conn = get_db()
-
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-            result = cur.fetchone()[0]
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        result = cur.fetchone()[0]
 
         return {
             "status": "success",
@@ -927,9 +931,10 @@ def db_check():
         }, 500
 
     finally:
-        if conn:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
             conn.close()
-
 # =====================================================
 # NEARBY PET STORES
 # =====================================================
