@@ -17,15 +17,15 @@
                 <form method="POST" action="{{ url_for('register') }}">
 
                     <div class="mb-3">
-                        <label for="full_name" class="form-label">
-                            Full Name
+                        <label for="username" class="form-label">
+                            Username
                         </label>
                         <input type="text"
                                class="form-control"
-                               id="full_name"
-                               name="full_name"
-                               placeholder="Enter your full name"
-                               autocomplete="name"
+                               id="username"
+                               name="username"
+                               placeholder="Choose a username"
+                               autocomplete="username"
                                required>
                     </div>
 
@@ -37,7 +37,7 @@
                                class="form-control"
                                id="email"
                                name="email"
-                               placeholder="Enter your email"
+                               placeholder="Enter your email address"
                                autocomplete="email"
                                required>
                     </div>
@@ -64,7 +64,7 @@
                                class="form-control"
                                id="confirm_password"
                                name="confirm_password"
-                               placeholder="Confirm your password"
+                               placeholder="Re-enter your password"
                                autocomplete="new-password"
                                minlength="8"
                                required>
