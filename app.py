@@ -695,6 +695,60 @@ def admin_dashboard():
 
 
 # =====================================================
+# MARK ORDER AS PAID AND DONE
+# =====================================================
+
+@app.route(
+    "/admin/orders/<int:order_id>/complete",
+    methods=["POST"]
+)
+def complete_order(order_id):
+    denied = require_admin()
+    if denied:
+        return denied
+
+    conn = get_db()
+    p = placeholder(conn)
+
+    try:
+        with cursor_for(conn) as cur:
+            cur.execute(
+                f"SELECT * FROM pet_orders WHERE id = {p}",
+                (order_id,)
+            )
+            order = cur.fetchone()
+
+            if not order:
+                abort(404)
+
+            if order["payment_status"] == "Paid":
+                flash("This order has already been paid.", "info")
+                return redirect(url_for("admin_dashboard"))
+
+            cur.execute(
+                f"""UPDATE pet_orders
+                    SET payment_status = {p},
+                        order_status = {p}
+                    WHERE id = {p}""",
+                ("Paid", "Done", order_id)
+            )
+
+        conn.commit()
+        flash(
+            "Payment confirmed! Order status is now Done.",
+            "success"
+        )
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+    return redirect(url_for("admin_dashboard"))
+
+# =====================================================
 # ADD PRODUCT (CREATE)
 # =====================================================
 

@@ -345,7 +345,8 @@
 </section>
 
 
-<!-- ORDER MANAGEMENT: VIEW ONLY -->
+
+<!-- ORDER MANAGEMENT -->
 <section class="admin-section">
     <h3 class="page-title mb-3">🛒 Customer Orders</h3>
 
@@ -363,6 +364,7 @@
                         <th>Payment Status</th>
                         <th>Order Status</th>
                         <th>Date</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
 
@@ -377,21 +379,60 @@
                             ₱{{ "%.2f"|format(order['total_price']) }}
                         </td>
                         <td>{{ order['payment_method'] }}</td>
+
                         <td>
-                            <span class="badge text-bg-warning">
-                                {{ order['payment_status'] }}
-                            </span>
+                            {% if order['payment_status'] == 'Paid' %}
+                                <span class="badge text-bg-success">
+                                    Paid
+                                </span>
+                            {% else %}
+                                <span class="badge text-bg-warning">
+                                    Pending
+                                </span>
+                            {% endif %}
                         </td>
+
                         <td>
-                            <span class="badge text-bg-info">
-                                {{ order['order_status'] }}
-                            </span>
+                            {% if order['order_status'] == 'Done' %}
+                                <span class="badge text-bg-success">
+                                    Done
+                                </span>
+                            {% else %}
+                                <span class="badge text-bg-info">
+                                    {{ order['order_status'] }}
+                                </span>
+                            {% endif %}
                         </td>
+
                         <td>{{ order['created_at'] }}</td>
+
+                        <td>
+                            {% if order['order_status'] != 'Done' %}
+                                <form method="POST"
+                                      action="{{ url_for(
+                                          'complete_order',
+                                          order_id=order['id']
+                                      ) }}"
+                                      onsubmit="return confirm(
+                                          'Confirm that payment has been received and mark this order as Done?'
+                                      );">
+                                    <button type="submit"
+                                            class="btn btn-success btn-sm text-nowrap">
+                                        Confirm Payment &amp; Done
+                                    </button>
+                                </form>
+                            {% else %}
+                                <span class="text-success fw-bold">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    Completed
+                                </span>
+                            {% endif %}
+                        </td>
                     </tr>
+
                     {% else %}
                     <tr>
-                        <td colspan="9" class="text-center py-4">
+                        <td colspan="10" class="text-center py-4">
                             No orders have been placed.
                         </td>
                     </tr>
